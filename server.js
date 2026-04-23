@@ -2,7 +2,7 @@ const cors = require("cors");
 
 
 require("dotenv").config();
-require("dotenv").config();
+
 
 // IMPORTS
 
@@ -12,7 +12,7 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
-const cors = require("cors");
+const SECRET = process.env.JWT_SECRET;
 
 // APP
 const app = express();
@@ -23,8 +23,7 @@ const io = new Server(server);
 app.use(express.json());
 app.use(cors());
 
-app.use(express.json());
-app.use(cors());
+
 // ==========================
 // DB
 // ==========================
