@@ -1,24 +1,30 @@
 const cors = require("cors");
-app.use(cors());
+
 
 require("dotenv").config();
-// ==========================
+require("dotenv").config();
+
 // IMPORTS
-// ==========================
+
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
+const cors = require("cors");
 
-const SECRET = process.env.JWT_SECRET;
+// APP
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+// MIDDLEWARES
 app.use(express.json());
+app.use(cors());
 
+app.use(express.json());
+app.use(cors());
 // ==========================
 // DB
 // ==========================
@@ -109,6 +115,9 @@ crearAdmin();
 
 // ==========================
 app.use(express.static("public"));
+app.get("/", (req, res) => {
+  res.sendFile(__dirname + "/public/index.html");
+});
 
 // ==========================
 // BACKEND
@@ -607,5 +616,5 @@ io.on("connection", (socket) => {
 const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, () => {
-  console.log("🔥 Servidor corriendo en puerto " + PORT);
+  console.log("🔥 SISTEMA PRO ESTABLE en puerto " + PORT);
 });
