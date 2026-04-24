@@ -51,9 +51,9 @@ let pedidosPrevios = [];
 let notificaciones = [];
 let productosCache = [];
 
-// ==========================
+
 // LOGIN
-// ==========================
+
 async function login(){
   try {
     const res = await fetch("/login",{
@@ -103,9 +103,9 @@ document.body.addEventListener("click", () => {
 
 window.login = login;
 
-// ==========================
+// 
 // TABS
-// ==========================
+// 
 function cargarTabs(){
 
   let html = "";
@@ -129,9 +129,9 @@ function cargarTabs(){
   document.getElementById("tabs").innerHTML = html;
 }
 
-// ==========================
+// 
 // DASHBOARD
-// ==========================
+// 
 function verDashboard(){
   document.getElementById("contenido").innerHTML = 
   "<h3>Dashboard</h3>" +
@@ -307,6 +307,7 @@ function verPedidos(){
   "<h3>Crear Pedido</h3>" +
 
   "Mesa:<input id='mesa'><br><br>" +
+  "Mesa:<input id='mesa' placeholder='Ej: 1, 2, 10'><br><br>" +
 
   "Buscar:<input id='buscador' onkeyup='buscarProducto()'><br>" +
   "<div id='resultados'></div>" +
@@ -340,6 +341,7 @@ async function buscarProducto(){
 
   productosCache.forEach(p=>{
 
+  productos.forEach(p=>{
     if(p.nombre && p.nombre.toLowerCase().includes(texto)){
 
       const btn = document.createElement("button");
@@ -515,7 +517,7 @@ async function cargarPedidos(){
 
   data.forEach(p => {
 
-    if(p.estado === "entregado") return;
+
 
     let color = "#300";
     if(p.estado === "preparando") color = "#663300";
@@ -568,6 +570,13 @@ async function cargarPedidos(){
 
     cont.appendChild(div);
 
+    
+    if(p.estado === "entregado" && !p.pagado){
+    const btnCobrar = document.createElement("button");
+    btnCobrar.innerText = "💰 Cobrar";
+    btnCobrar.onclick = () => cobrarPedido(p._id, p.total);
+    div.appendChild(btnCobrar);
+    }
   });
 
   // 🔥 AUTO SCROLL
@@ -865,6 +874,18 @@ function calcularVuelto(id, total){
 }
 
 async function confirmarPago(id, monto, metodo, recibido){
+async function cobrarPedido(id, total){
+
+  const monto = prompt("Monto a pagar (Total S/" + total + ")");
+  if(!monto) return;
+
+  const metodo = prompt("Metodo: efectivo o yape");
+
+  let recibido = null;
+
+  if(metodo === "efectivo"){
+    recibido = prompt("Monto recibido:");
+  }
 
   const res = await fetch("/pedidos/" + id + "/pagar",{
     method:"POST",
@@ -876,6 +897,9 @@ async function confirmarPago(id, monto, metodo, recibido){
       monto,
       metodo,
       recibido
+      monto:Number(monto),
+      metodo,
+      recibido: recibido ? Number(recibido) : null
     })
   });
 
@@ -1183,8 +1207,14 @@ socket.on("actualizar",()=>{
 });
 
 
+setInterval(()=>{
+  if(document.getElementById("lista")){
+    cargarPedidos();
+  }
+}, 6000);
 // ==========================
 </script>
 
 </body>
+</html>
 </html>
