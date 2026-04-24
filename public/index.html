@@ -66,8 +66,8 @@ async function login(){
 
     const data = await res.json();
 
-    console.log("RESPUESTA LOGIN:", data); // 👈 DEBUG
-    console.log("ROL:", rol);
+    console.log("RESPUESTA LOGIN:", data);
+    console.log("ROL recibido:", data.rol);
     if(data.token){
       token=data.token;
       rol=data.rol;
@@ -158,8 +158,8 @@ async function cargarDashboard(){
 
   pedidos.forEach(p=>{
 
-    if(p.estado === "entregado"){
-      totalVentas += p.total;
+    if(p.estado === "entregado" && p.pagado){
+  totalVentas += p.total;
 
       const fechaPedido = new Date(p.fecha);
       if(!isNaN(fechaPedido) && fechaPedido.toDateString() === hoy){
@@ -302,7 +302,7 @@ async function resetSistema(){
 // ==========================
 function verPedidos(){
   document.getElementById("contenido").innerHTML = 
-  "Mesa:<input id='mesa'><br><br>" +
+  "Mesa:<input id='mesa' placeholder='Ej: 1, 2, 10'><br><br>" +
 
   "Buscar:<input id='buscador' onkeyup='buscarProducto()'><br>" +
   "<div id='resultados'></div>" +
@@ -325,7 +325,7 @@ async function buscarProducto(){
   cont.innerHTML = "";
 
   productos.forEach(p=>{
-    if(p.nombre.toLowerCase().includes(texto)){
+    if(p.nombre && p.nombre.toLowerCase().includes(texto)){
 
       const btn = document.createElement("button");
       btn.innerText = p.nombre + " - S/" + p.precio;
@@ -348,7 +348,7 @@ function seleccionarProducto(nombre,precio,categoria){
   const cont = document.getElementById("opcionesJugo");
   cont.innerHTML = "";
 
-  if(categoria === "jugo"){
+  if(categoria && categoria.toLowerCase() === "jugo"){
     cont.innerHTML =
     "Sin azúcar <input type='checkbox' id='azucar'><br>" +
     "Helado <input type='checkbox' id='helado'><br>" +
@@ -369,7 +369,7 @@ function agregarProducto(){
     precio: productoSeleccionado.precio
   };
 
-  if(productoSeleccionado.categoria === "jugo"){
+  if(productoSeleccionado.categoria && productoSeleccionado.categoria.toLowerCase() === "jugo"){
     item.azucar = document.getElementById("azucar").checked;
     item.helado = document.getElementById("helado").checked;
     item.nota = document.getElementById("nota").value;
@@ -460,7 +460,7 @@ async function cargarPedidos(){
 
   data.forEach(p => {
 
-    if(p.estado === "entregado") return;
+
 
     let color = "#300";
     if(p.estado === "preparando") color = "#663300";
@@ -473,15 +473,22 @@ async function cargarPedidos(){
     div.style.borderRadius = "8px";
 
     let html = "<b>Mesa " + p.mesa + "</b><br>";
+    html += "<b>Total: S/ " + p.total + "</b><br>";
+
+    let total = 0;
+
+    p.items.forEach(i => {
+    total += Number(i.precio);
+    });
 
     let fecha = new Date(p.fecha);
     html += (isNaN(fecha) ? "Fecha inválida" : fecha.toLocaleString()) + "<br><br>";
 
     p.items.forEach(i => {
-      html += "- " + i.producto;
+      html += "- " + String(i.producto);
       if(i.azucar) html += " | sin azúcar";
       if(i.helado) html += " | helado";
-      if(i.nota) html += " | nota: " + i.nota;
+      if(i.nota) html += " | nota: " + String(i.nota);
       html += "<br>";
     });
 
@@ -503,8 +510,13 @@ async function cargarPedidos(){
     div.appendChild(btn1);
     div.appendChild(btn2);
     div.appendChild(btn3);
-
-    cont.appendChild(div);
+    
+    if(p.estado === "entregado" && !p.pagado){
+    const btnCobrar = document.createElement("button");
+    btnCobrar.innerText = "💰 Cobrar";
+    btnCobrar.onclick = () => cobrarPedido(p._id, p.total);
+    div.appendChild(btnCobrar);
+    }
   });
 
   // 🔥 AUTO SCROLL
@@ -557,7 +569,9 @@ async function crearProducto(){
       categoria:document.getElementById("c").value
     })
   });
-    cargarProductos();
+
+  socket.emit("actualizar_manual");
+  cargarProductos();
 }
 
 async function cargarProductos(){
@@ -615,6 +629,43 @@ async function eliminarProducto(id){
   });
 
   cargarProductos();
+}
+
+async function cobrarPedido(id, total){
+
+  const monto = prompt("Monto a pagar (Total S/" + total + ")");
+  if(!monto) return;
+
+  const metodo = prompt("Metodo: efectivo o yape");
+
+  let recibido = null;
+
+  if(metodo === "efectivo"){
+    recibido = prompt("Monto recibido:");
+  }
+
+  const res = await fetch("/pedidos/" + id + "/pagar",{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json",
+      "Authorization":token
+    },
+    body:JSON.stringify({
+      monto:Number(monto),
+      metodo,
+      recibido: recibido ? Number(recibido) : null
+    })
+  });
+
+  const data = await res.json();
+
+  if(data.error){
+    alert("❌ " + data.error);
+  } else {
+    alert("✅ Pago registrado");
+  }
+
+  socket.emit("actualizar_manual");
 }
 
 // ==========================
@@ -867,11 +918,9 @@ setInterval(()=>{
   if(document.getElementById("lista")){
     cargarPedidos();
   }
-}, 3000);
+}, 6000);
 // ==========================
 </script>
 
 </body>
 </html>
-`);
-});
