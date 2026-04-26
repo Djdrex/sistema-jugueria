@@ -569,7 +569,7 @@ async function cargarPedidosMesero(){
 
     const btn = document.createElement("button");
     btn.innerText = "💰 Cobrar";
-    btn.onclick = () => cobrarPedido(p._id, p.total);
+    btn.onclick = () => cobrarPedido(p._id, p);
 
     div.appendChild(btn);
 
@@ -673,26 +673,55 @@ async function eliminarProducto(id){
   cargarProductos();
 }
 
-function cobrarPedido(id, total){
+function cobrarPedido(id, pedido){
 
-  const cont = document.getElementById("contenido");
-
-  cont.innerHTML = `
+  let html = `
     <h3>💰 Cobrar Pedido</h3>
+    <b>Mesa ${pedido.mesa}</b><br><br>
 
-    Total: S/ ${total} <br><br>
+    <h4>Selecciona productos a cobrar</h4>
+  `;
 
-    <h4>Tipo de pago</h4>
+  pedido.items.forEach((item, index) => {
+    html += `
+      <input type="checkbox" class="itemCheck" data-precio="${item.precio}">
+      ${item.producto} - S/${item.precio}
+      <br>
+    `;
+  });
+
+  html += `
+    <br>
+    <button onclick="calcularTotalSeleccionado('${id}')">Calcular total</button>
+
+    <div id="totalSeleccionado"></div>
+  `;
+
+  document.getElementById("contenido").innerHTML = html;
+}
+
+function calcularTotalSeleccionado(id){
+
+  const checks = document.querySelectorAll(".itemCheck");
+
+  let total = 0;
+
+  checks.forEach(c => {
+    if(c.checked){
+      total += Number(c.dataset.precio);
+    }
+  });
+
+  if(total === 0){
+    alert("Selecciona al menos un producto");
+    return;
+  }
+
+  document.getElementById("totalSeleccionado").innerHTML = `
+    <h4>Total: S/ ${total}</h4>
+
     <button onclick="seleccionarMetodo('yape', '${id}', ${total})">Yape</button>
     <button onclick="seleccionarMetodo('efectivo', '${id}', ${total})">Efectivo</button>
-
-    <hr>
-
-    <h4>Dividir cuenta</h4>
-    Personas: <input id="personas" type="number" min="1" value="1">
-    <button onclick="dividirCuenta('${id}', ${total})">Dividir</button>
-
-    <div id="zonaPago"></div>
   `;
 }
 
@@ -720,14 +749,26 @@ function seleccionarMetodo(metodo, id, total){
 
 function calcularVuelto(id, total){
 
-  const recibido = Number(document.getElementById("recibido").value);
+  const input = document.getElementById("recibido");
 
-  if(!recibido || recibido < total){
+  if(!input){
+    alert("Error: no se encontró el campo de pago");
+    return;
+  }
+
+  const recibido = parseFloat(input.value);
+
+  if(isNaN(recibido)){
+    alert("Ingresa un monto válido");
+    return;
+  }
+
+  if(recibido < total){
     alert("Monto insuficiente");
     return;
   }
 
-  const vuelto = recibido - total;
+  const vuelto = (recibido - total).toFixed(2);
 
   document.getElementById("resultadoVuelto").innerHTML = `
     Vuelto: S/ ${vuelto} <br><br>
