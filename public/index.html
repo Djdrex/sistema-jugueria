@@ -302,7 +302,10 @@ async function resetSistema(){
 // ==========================
 function verPedidos(){
   document.getElementById("contenido").innerHTML = 
-  "Mesa:<input id='mesa' placeholder='Ej: 1, 2, 10'><br><br>" +
+
+  "<h3>Crear Pedido</h3>" +
+
+  "Mesa:<input id='mesa'><br><br>" +
 
   "Buscar:<input id='buscador' onkeyup='buscarProducto()'><br>" +
   "<div id='resultados'></div>" +
@@ -312,7 +315,12 @@ function verPedidos(){
   "<h4>Pedido actual</h4>" +
   "<div id='preview'></div>" +
 
-  "<button onclick='enviarPedido()'>Enviar Pedido</button>";
+  "<button onclick='enviarPedido()'>Enviar Pedido</button>" +
+
+  "<hr><h3>💰 Cobrar Pedidos</h3>" +
+  "<div id='listaCobros'></div>";
+
+  cargarPedidosMesero();
 }
 
 // BUSCAR
@@ -460,7 +468,7 @@ async function cargarPedidos(){
 
   data.forEach(p => {
 
-
+    if(p.estado === "entregado") return;
 
     let color = "#300";
     if(p.estado === "preparando") color = "#663300";
@@ -510,16 +518,9 @@ async function cargarPedidos(){
     div.appendChild(btn1);
     div.appendChild(btn2);
     div.appendChild(btn3);
-    
-    if(p.estado === "entregado" && !p.pagado){
-    const btnCobrar = document.createElement("button");
-    btnCobrar.innerText = "💰 Cobrar";
-    btnCobrar.onclick = () => cobrarPedido(p._id, p.total);
-    div.appendChild(btnCobrar);
-    }
 
     cont.appendChild(div);
-    
+
   });
 
   // 🔥 AUTO SCROLL
@@ -537,6 +538,44 @@ async function cargarPedidos(){
 
   
   pedidosPrevios = data;
+}
+
+async function cargarPedidosMesero(){
+
+  const res = await fetch("/pedidos");
+  const data = await res.json();
+
+  const cont = document.getElementById("listaCobros");
+  cont.innerHTML = "";
+
+  data.forEach(p => {
+
+    // 🔥 SOLO PEDIDOS ENTREGADOS Y NO PAGADOS
+    if(p.estado !== "entregado" || p.pagado) return;
+
+    const div = document.createElement("div");
+    div.style.border = "1px solid white";
+    div.style.margin = "5px";
+    div.style.padding = "10px";
+
+    let html = "<b>Mesa " + p.mesa + "</b><br>";
+    html += "Total: S/" + p.total + "<br><br>";
+
+    p.items.forEach(i => {
+      html += "- " + i.producto + "<br>";
+    });
+
+    div.innerHTML = html;
+
+    const btn = document.createElement("button");
+    btn.innerText = "💰 Cobrar";
+    btn.onclick = () => cobrarPedido(p._id, p.total);
+
+    div.appendChild(btn);
+
+    cont.appendChild(div);
+  });
+
 }
 
 // ==========================
@@ -912,6 +951,7 @@ socket.on("actualizar",()=>{
   if(document.getElementById("listaProd")) cargarProductos();
   if(document.getElementById("listaInf")) cargarInformes();
   if(document.getElementById("stats")) cargarDashboard();
+  if(document.getElementById("listaCobros")) cargarPedidosMesero();
 
   
   cargarNotificaciones();
