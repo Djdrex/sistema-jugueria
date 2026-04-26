@@ -683,14 +683,14 @@ function cobrarPedido(id, total){
     Total: S/ ${total} <br><br>
 
     <h4>Tipo de pago</h4>
-    <button onclick="seleccionarMetodo('yape', ${id}, ${total})">Yape</button>
-    <button onclick="seleccionarMetodo('efectivo', ${id}, ${total})">Efectivo</button>
+    <button onclick="seleccionarMetodo('yape', '${id}', ${total})">Yape</button>
+    <button onclick="seleccionarMetodo('efectivo', '${id}', ${total})">Efectivo</button>
 
     <hr>
 
     <h4>Dividir cuenta</h4>
     Personas: <input id="personas" type="number" min="1" value="1">
-    <button onclick="dividirCuenta(${id}, ${total})">Dividir</button>
+    <button onclick="dividirCuenta('${id}', ${total})">Dividir</button>
 
     <div id="zonaPago"></div>
   `;
