@@ -679,7 +679,10 @@ function cobrarPedido(id, pedido){
     <h3>💰 Cobrar Pedido</h3>
     <b>Mesa ${pedido.mesa}</b><br><br>
 
-    <h4>Selecciona productos a cobrar</h4>
+    <button onclick="seleccionarTodo()">✅ Seleccionar todo</button>
+    <button onclick="deseleccionarTodo()">❌ Limpiar</button>
+
+    <h4>Selecciona productos</h4>
   `;
 
   pedido.items.forEach((item, index) => {
@@ -700,6 +703,14 @@ function cobrarPedido(id, pedido){
   document.getElementById("contenido").innerHTML = html;
 }
 
+function seleccionarTodo(){
+  document.querySelectorAll(".itemCheck").forEach(c => c.checked = true);
+}
+
+function deseleccionarTodo(){
+  document.querySelectorAll(".itemCheck").forEach(c => c.checked = false);
+}
+
 function calcularTotalSeleccionado(id){
 
   const checks = document.querySelectorAll(".itemCheck");
@@ -717,6 +728,8 @@ function calcularTotalSeleccionado(id){
     return;
   }
 
+  total = Number(total.toFixed(2));
+
   document.getElementById("totalSeleccionado").innerHTML = `
     <h4>Total: S/ ${total}</h4>
 
@@ -727,7 +740,12 @@ function calcularTotalSeleccionado(id){
 
 function seleccionarMetodo(metodo, id, total){
 
-  const zona = document.getElementById("zonaPago");
+  const zona = document.getElementById("totalSeleccionado");
+
+  if(!zona){
+    alert("Error en interfaz de pago");
+    return;
+  }
 
   if(metodo === "yape"){
     zona.innerHTML = `
@@ -739,12 +757,11 @@ function seleccionarMetodo(metodo, id, total){
   if(metodo === "efectivo"){
     zona.innerHTML = `
       <p>Total: S/ ${total}</p>
-      Recibido: <input id="recibido"><br><br>
-      <button onclick="calcularVuelto(${id}, ${total})">Calcular</button>
+      Recibido: <input id="recibido" type="number"><br><br>
+      <button onclick="calcularVuelto('${id}', ${total})">Calcular vuelto</button>
       <div id="resultadoVuelto"></div>
     `;
   }
-
 }
 
 function calcularVuelto(id, total){
