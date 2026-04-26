@@ -780,14 +780,10 @@ function calcularVuelto(id, total){
     return;
   }
 
-  if(monto > totalRestante){
-  return res.json({ error: "El pago excede el total restante" });
-}
-  if(metodo === "efectivo"){
-  if(recibido < monto){
-    return res.json({ error: "Monto insuficiente" });
+  if(recibido < total){
+    alert("Monto insuficiente");
+    return;
   }
-}
 
   const vuelto = (recibido - total).toFixed(2);
 
