@@ -673,18 +673,71 @@ async function eliminarProducto(id){
   cargarProductos();
 }
 
-async function cobrarPedido(id, total){
+function cobrarPedido(id, total){
 
-  const monto = prompt("Monto a pagar (Total S/" + total + ")");
-  if(!monto) return;
+  const cont = document.getElementById("contenido");
 
-  const metodo = prompt("Metodo: efectivo o yape");
+  cont.innerHTML = `
+    <h3>💰 Cobrar Pedido</h3>
 
-  let recibido = null;
+    Total: S/ ${total} <br><br>
+
+    <h4>Tipo de pago</h4>
+    <button onclick="seleccionarMetodo('yape', ${id}, ${total})">Yape</button>
+    <button onclick="seleccionarMetodo('efectivo', ${id}, ${total})">Efectivo</button>
+
+    <hr>
+
+    <h4>Dividir cuenta</h4>
+    Personas: <input id="personas" type="number" min="1" value="1">
+    <button onclick="dividirCuenta(${id}, ${total})">Dividir</button>
+
+    <div id="zonaPago"></div>
+  `;
+}
+
+function seleccionarMetodo(metodo, id, total){
+
+  const zona = document.getElementById("zonaPago");
+
+  if(metodo === "yape"){
+    zona.innerHTML = `
+      <p>Pago con Yape por S/ ${total}</p>
+      <button onclick="confirmarPago('${id}', ${total}, 'yape', null)">Confirmar</button>
+    `;
+  }
 
   if(metodo === "efectivo"){
-    recibido = prompt("Monto recibido:");
+    zona.innerHTML = `
+      <p>Total: S/ ${total}</p>
+      Recibido: <input id="recibido"><br><br>
+      <button onclick="calcularVuelto(${id}, ${total})">Calcular</button>
+      <div id="resultadoVuelto"></div>
+    `;
   }
+
+}
+
+function calcularVuelto(id, total){
+
+  const recibido = Number(document.getElementById("recibido").value);
+
+  if(!recibido || recibido < total){
+    alert("Monto insuficiente");
+    return;
+  }
+
+  const vuelto = recibido - total;
+
+  document.getElementById("resultadoVuelto").innerHTML = `
+    Vuelto: S/ ${vuelto} <br><br>
+    <button onclick="confirmarPago('${id}', ${total}, 'efectivo', ${recibido})">
+      Confirmar pago
+    </button>
+  `;
+}
+
+async function confirmarPago(id, monto, metodo, recibido){
 
   const res = await fetch("/pedidos/" + id + "/pagar",{
     method:"POST",
@@ -693,9 +746,9 @@ async function cobrarPedido(id, total){
       "Authorization":token
     },
     body:JSON.stringify({
-      monto:Number(monto),
+      monto,
       metodo,
-      recibido: recibido ? Number(recibido) : null
+      recibido
     })
   });
 
@@ -708,6 +761,44 @@ async function cobrarPedido(id, total){
   }
 
   socket.emit("actualizar_manual");
+  verPedidos();
+}
+
+function dividirCuenta(id, total){
+
+  const personas = Number(document.getElementById("personas").value);
+
+  if(!personas || personas <= 0){
+    alert("Número inválido");
+    return;
+  }
+
+  const porPersona = (total / personas).toFixed(2);
+
+  let html = "<h4>Cada persona paga: S/ " + porPersona + "</h4>";
+
+  for(let i=0; i<personas; i++){
+    html += `
+      Persona ${i+1} 
+      <button onclick="confirmarPago('${id}', ${porPersona}, 'yape', null)">Yape</button>
+      <button onclick="pagoEfectivoSeparado('${id}', ${porPersona})">Efectivo</button>
+      <br><br>
+    `;
+  }
+
+  document.getElementById("zonaPago").innerHTML = html;
+}
+
+function pagoEfectivoSeparado(id, monto){
+
+  const recibido = prompt("Monto recibido:");
+
+  if(!recibido || Number(recibido) < monto){
+    alert("Monto insuficiente");
+    return;
+  }
+
+  confirmarPago(id, monto, "efectivo", Number(recibido));
 }
 
 // ==========================
