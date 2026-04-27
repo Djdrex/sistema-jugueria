@@ -744,10 +744,9 @@ function calcularTotalSeleccionado(id){
       const restante = Number(pedido.total) - pagado;
 
       if(total > restante){
-        alert("❌ Estás cobrando más de lo que falta");
-        return;
-      }
-
+      total = restante; 
+     }
+      
       total = Number(total.toFixed(2));
 
       document.getElementById("totalSeleccionado").innerHTML = `
