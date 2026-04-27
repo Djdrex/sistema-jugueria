@@ -685,13 +685,19 @@ function cobrarPedido(id, pedido){
     <h4>Selecciona productos</h4>
   `;
 
-  pedido.items.forEach((item, index) => {
-    html += `
-      <input type="checkbox" class="itemCheck" data-precio="${item.precio}">
-      ${item.producto} - S/${item.precio}
-      <br>
-    `;
-  });
+  let pagado = pedido.totalPagado || 0;
+
+html += `<p>💰 Ya pagado: S/ ${pagado}</p>`;
+html += `<p>🧾 Restante: S/ ${(pedido.total - pagado).toFixed(2)}</p><br>`;
+
+pedido.items.forEach((item, index) => {
+
+  html += `
+    <input type="checkbox" class="itemCheck" data-precio="${item.precio}">
+    ${item.producto} - S/${item.precio}
+    <br>
+  `;
+});
 
   html += `
     <br>
@@ -728,14 +734,28 @@ function calcularTotalSeleccionado(id){
     return;
   }
 
-  total = Number(total.toFixed(2));
+  fetch("/pedidos")
+    .then(res => res.json())
+    .then(data => {
 
-  document.getElementById("totalSeleccionado").innerHTML = `
-    <h4>Total: S/ ${total}</h4>
+      const pedido = data.find(p => p._id === id);
 
-    <button onclick="seleccionarMetodo('yape', '${id}', ${total})">Yape</button>
-    <button onclick="seleccionarMetodo('efectivo', '${id}', ${total})">Efectivo</button>
-  `;
+      const restante = pedido.total - (pedido.totalPagado || 0);
+
+      if(total > restante){
+        alert("❌ Estás cobrando más de lo que falta");
+        return;
+      }
+
+      total = Number(total.toFixed(2));
+
+      document.getElementById("totalSeleccionado").innerHTML = `
+        <h4>Total: S/ ${total}</h4>
+
+        <button onclick="seleccionarMetodo('yape', '${id}', ${total})">Yape</button>
+        <button onclick="seleccionarMetodo('efectivo', '${id}', ${total})">Efectivo</button>
+      `;
+    });
 }
 
 function seleccionarMetodo(metodo, id, total){
