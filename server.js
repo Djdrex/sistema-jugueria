@@ -27,7 +27,9 @@ app.use(cors());
 // ==========================
 // DB
 // ==========================
-mongoose.connect(process.env.MONGO_URI)
+mongoose.connect(process.env.MONGO_URI, {
+  family: 4
+})
   .then(() => console.log("🟢 Mongo conectado"))
   .catch(err => console.log("🔴 Error Mongo:", err));
 
@@ -52,14 +54,15 @@ const Pedido = mongoose.model("Pedido", {
   estado: { type: String, default: "en_espera" },
   creadoPor: String,
   total: Number,
-  items: Array,
 
-  pagado: { type: Boolean, default: false },
+  // 🔥 NUEVO
   totalPagado: { type: Number, default: 0 },
+  pagado: { type: Boolean, default: false },
+
   pagos: [
     {
       monto: Number,
-      metodo: String, // efectivo | yape
+      metodo: String,
       recibido: Number,
       vuelto: Number,
       mesero: String,
@@ -67,14 +70,14 @@ const Pedido = mongoose.model("Pedido", {
     }
   ],
 
-  fecha: { type: Date, default: Date.now }
-});
+  items: [
+    {
+      producto: String,
+      precio: Number,
+      pagado: { type: Number, default: 0 } // opcional (para futuro)
+    }
+  ],
 
-const Notificacion = mongoose.model("Notificacion", {
-  mensaje: String,
-  usuario: String,
-  rol: String,
-  leido: { type: Boolean, default: false },
   fecha: { type: Date, default: Date.now }
 });
 
@@ -114,8 +117,12 @@ crearAdmin();
 
 // ==========================
 app.use(express.static("public"));
+const path = require("path");
+
+app.use(express.static(path.join(__dirname, "public")));
+
 app.get("/", (req, res) => {
-  res.sendFile(__dirname + "/public/index.html");
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 // ==========================
@@ -210,7 +217,12 @@ app.get("/caja", auth, soloAdmin, async (req, res) => {
   res.json(data);
 });
 
-app.post("/pedidos/:id/pagar", auth, soloMesero, async (req, res) => {
+app.post("/pedidos/:id/pagar", auth, (req, res, next) => {
+  if (req.user.rol !== "mesero" && req.user.rol !== "admin" && req.user.rol !== "barra") {
+    return res.sendStatus(403);
+  }
+  next();
+}, async (req, res) => {
 
   const { monto, metodo, recibido } = req.body;
 
@@ -226,7 +238,8 @@ app.post("/pedidos/:id/pagar", auth, soloMesero, async (req, res) => {
     return res.json({ error: "Pedido ya pagado" });
   }
 
-  const restante = pedido.total - pedido.totalPagado;
+  const pagado = pedido.totalPagado || 0;
+  const restante = pedido.total - pagado;
 
   if (monto <= 0) {
     return res.json({ error: "Monto inválido" });
