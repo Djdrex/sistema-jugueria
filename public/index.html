@@ -740,7 +740,8 @@ function calcularTotalSeleccionado(id){
 
       const pedido = data.find(p => p._id === id);
 
-      const restante = pedido.total - (pedido.totalPagado || 0);
+      const pagado = Number(pedido.totalPagado || 0);
+      const restante = Number(pedido.total) - pagado;
 
       if(total > restante){
         alert("❌ Estás cobrando más de lo que falta");
