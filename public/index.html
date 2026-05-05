@@ -49,6 +49,7 @@ let sonidoActivo = false;
 let audio = new Audio("https://www.soundjay.com/buttons/sounds/button-3.mp3");
 let pedidosPrevios = [];
 let notificaciones = [];
+let productosCache = [];
 
 // ==========================
 // LOGIN
@@ -325,17 +326,24 @@ function verPedidos(){
 
 // BUSCAR
 async function buscarProducto(){
+
   const texto = document.getElementById("buscador").value.toLowerCase();
-  const res = await fetch("/productos");
-  const productos = await res.json();
+
+  if(productosCache.length === 0){
+    const res = await fetch("/productos");
+    productosCache = await res.json();
+  }
 
   const cont = document.getElementById("resultados");
+
   cont.innerHTML = "";
 
-  productos.forEach(p=>{
+  productosCache.forEach(p=>{
+
     if(p.nombre && p.nombre.toLowerCase().includes(texto)){
 
       const btn = document.createElement("button");
+
       btn.innerText = p.nombre + " - S/" + p.precio;
 
       btn.onclick = function(){
@@ -343,6 +351,7 @@ async function buscarProducto(){
       };
 
       cont.appendChild(btn);
+
       cont.appendChild(document.createElement("br"));
     }
   });
@@ -410,35 +419,73 @@ function eliminarItem(i){
 // ENVIAR
 async function enviarPedido(){
 
-  if(pedidoActual.length === 0){
-    alert("Agrega productos");
-    return;
+  try{
+
+    if(pedidoActual.length === 0){
+      alert("Agrega productos");
+      return;
+    }
+
+    const mesa = document.getElementById("mesa").value;
+
+    if(!mesa){
+      alert("Ingresa una mesa");
+      return;
+    }
+
+    const btn = document.querySelector("button[onclick='enviarPedido()']");
+    btn.disabled = true;
+    btn.innerText = "Enviando...";
+
+    const res = await fetch("/pedidos",{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "Authorization":token
+      },
+      body:JSON.stringify({
+        mesa,
+        items:pedidoActual
+      })
+    });
+
+    const data = await res.json();
+
+    if(data.error){
+      alert("❌ " + data.error);
+      btn.disabled = false;
+      btn.innerText = "Enviar Pedido";
+      return;
+    }
+
+    alert("✅ Pedido enviado");
+
+    pedidoActual = [];
+
+    renderPreview();
+
+    document.getElementById("mesa").value = "";
+    document.getElementById("buscador").value = "";
+    document.getElementById("resultados").innerHTML = "";
+
+    socket.emit("actualizar_manual");
+
+    btn.disabled = false;
+    btn.innerText = "Enviar Pedido";
+
+  }catch(err){
+
+    console.error(err);
+
+    alert("❌ Error enviando pedido");
+
+    const btn = document.querySelector("button[onclick='enviarPedido()']");
+
+    if(btn){
+      btn.disabled = false;
+      btn.innerText = "Enviar Pedido";
+    }
   }
-
-  const fecha = new Date();
-
-  const res = await fetch("/pedidos",{
-  method:"POST",
-  headers:{
-    "Content-Type":"application/json",
-    "Authorization":token
-  },
-  body:JSON.stringify({
-  mesa:document.getElementById("mesa").value,
-  items:pedidoActual
-})
- });
-
- const data = await res.json();
-
- if(data.error){
-  alert("❌ " + data.error);
-  return;
-}
-
-  pedidoActual = [];
-  renderPreview();
-  socket.emit("actualizar_manual");
 }
 
 // ==========================
@@ -690,19 +737,13 @@ function cobrarPedido(id, pedido){
 html += `<p>💰 Ya pagado: S/ ${pagado}</p>`;
 html += `<p>🧾 Restante: S/ ${(pedido.total - pagado).toFixed(2)}</p><br>`;
 
-pedido.items.forEach((item, index) => {
+pedido.items.forEach((item) => {
 
-  const pagado = pedido.totalPagado || 0;
-const restante = pedido.total - pagado;
-
-// 🔥 dividir proporcionalmente (simple)
-const precioReal = Math.min(item.precio, restante);
-
-html += `
-  <input type="checkbox" class="itemCheck" data-precio="${precioReal}">
-  ${item.producto} - S/${precioReal.toFixed(2)}
-  <br>
-`;
+  html += `
+    <input type="checkbox" class="itemCheck" data-precio="${item.precio}">
+    ${item.producto} - S/${Number(item.precio).toFixed(2)}
+    <br>
+  `;
 });
 
   html += `
@@ -1116,7 +1157,8 @@ async function cambiarEstado(id,estado){
   });
 
   if(estado === "listo" && sonidoActivo){
-    audio.play();
+    audio.currentTime = 0;
+    audio.play().catch(()=>{});
   }
 } // 
  
@@ -1124,21 +1166,23 @@ async function cambiarEstado(id,estado){
 // 🔄 ACTUALIZACIONES EN TIEMPO REAL
 // ==========================
 socket.on("actualizar",()=>{
+
   if(document.getElementById("lista")) cargarPedidos();
+
   if(document.getElementById("listaProd")) cargarProductos();
+
   if(document.getElementById("listaInf")) cargarInformes();
+
   if(document.getElementById("stats")) cargarDashboard();
+
   if(document.getElementById("listaCobros")) cargarPedidosMesero();
 
-  
+  if(document.getElementById("panelNoti").style.display === "block"){
   cargarNotificaciones();
+}
 });
 
-setInterval(()=>{
-  if(document.getElementById("lista")){
-    cargarPedidos();
-  }
-}, 6000);
+
 // ==========================
 </script>
 
