@@ -692,11 +692,17 @@ html += `<p>🧾 Restante: S/ ${(pedido.total - pagado).toFixed(2)}</p><br>`;
 
 pedido.items.forEach((item, index) => {
 
-  html += `
-    <input type="checkbox" class="itemCheck" data-precio="${item.precio}">
-    ${item.producto} - S/${item.precio}
-    <br>
-  `;
+  const pagado = pedido.totalPagado || 0;
+const restante = pedido.total - pagado;
+
+// 🔥 dividir proporcionalmente (simple)
+const precioReal = Math.min(item.precio, restante);
+
+html += `
+  <input type="checkbox" class="itemCheck" data-precio="${precioReal}">
+  ${item.producto} - S/${precioReal.toFixed(2)}
+  <br>
+`;
 });
 
   html += `
@@ -745,6 +751,8 @@ function calcularTotalSeleccionado(id){
 
       if(total > restante){
       total = restante; 
+      total = Number(total.toFixed(2));
+       alert("El total seleccionado excede el restante. Se ajustará a S/ " + total);
      }
       
       total = Number(total.toFixed(2));
