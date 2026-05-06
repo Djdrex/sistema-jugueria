@@ -23,19 +23,14 @@ const io = new Server(server);
 app.use(express.json());
 app.use(cors());
 
-
-// ==========================
 // DB
-// ==========================
 mongoose.connect(process.env.MONGO_URI, {
   family: 4
 })
   .then(() => console.log("🟢 Mongo conectado"))
   .catch(err => console.log("🔴 Error Mongo:", err));
 
-// ==========================
 // MODELOS
-// ==========================
 const Usuario = mongoose.model("Usuario", {
   username: String,
   password: String,
@@ -55,6 +50,7 @@ const Pedido = mongoose.model("Pedido", {
   creadoPor: String,
   total: Number,
 
+  
   // 🔥 NUEVO
   totalPagado: { type: Number, default: 0 },
   pagado: { type: Boolean, default: false },
@@ -88,9 +84,7 @@ const Caja = mongoose.model("Caja", {
   cerradoPor: String
 });
 
-// ==========================
 // ADMIN
-// ==========================
 async function crearAdmin() {
   // 1. Encriptamos la contraseña que tienes en tu archivo .env
   const hash = await bcrypt.hash(process.env.ADMIN_PASSWORD, 10);
@@ -115,7 +109,6 @@ async function crearAdmin() {
 }
 crearAdmin();
 
-// ==========================
 app.use(express.static("public"));
 const path = require("path");
 
@@ -125,9 +118,7 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// ==========================
 // BACKEND
-// ==========================
 
 // LOGIN
 app.post("/login", async (req, res) => {
@@ -278,9 +269,8 @@ app.post("/pedidos/:id/pagar", auth, (req, res, next) => {
   res.json(pedido);
 });
 
-// ==========================
-// 🔐 MIDDLEWARE AUTH (AQUÍ VA)
-// ==========================
+
+// 🔐 MIDDLEWARE AUTH
 function auth(req, res, next) {
 
   const token = req.headers.authorization;
@@ -299,9 +289,7 @@ function auth(req, res, next) {
 
 }
 
-// ==========================
 // 🎭 ROLES
-// ==========================
 function soloAdminPrincipal(req, res, next) {
   if (req.user.username !== "admin@titan02") {
     return res.status(403).json({ error: "Solo el admin principal puede hacer esto" });
@@ -330,9 +318,7 @@ function soloMesero(req, res, next) {
   next();
 }
 
-// ==========================
 // PRODUCTOS
-// ==========================
 app.post("/productos", auth, soloAdmin, async (req, res) => {
   const p = await Producto.create(req.body);
   io.emit("actualizar");
@@ -349,9 +335,7 @@ app.delete("/productos/:id", auth, soloAdmin, async (req, res) => {
   res.json({ ok: true });
 });
 
-// ==========================
 // 👤 USUARIOS (ADMIN)
-// ==========================
 
 // CREAR USUARIO
 app.post("/usuarios", auth, soloAdmin, async (req, res) => {
@@ -486,9 +470,7 @@ app.delete("/notificaciones", auth, async (req, res) => {
   res.json({ ok: true });
 });
 
-// ==========================
 // PEDIDOS
-// ==========================
 app.get("/pedidos", async (req, res) => {
   res.json(await Pedido.find());
 });
@@ -535,9 +517,7 @@ app.post("/pedidos", auth, soloMesero, async (req, res) => {
   req.body.items.forEach(i => total += i.precio);
 
 
-  // ==========================
-  // VALIDAR Y DESCONTAR STOCK (CORRECTO)
-  // ==========================
+  // VALIDAR Y DESCONTAR STOCK 
 
   // 1. Contar productos repetidos
   const conteo = {};
@@ -571,9 +551,7 @@ app.post("/pedidos", auth, soloMesero, async (req, res) => {
     }
   }
 
-  // ==========================
   // 2. CREAR PEDIDO
-  // ==========================
   const p = await Pedido.create({
     ...req.body,
     creadoPor: req.user.username,
@@ -582,10 +560,7 @@ app.post("/pedidos", auth, soloMesero, async (req, res) => {
   });
 
 
-
-  // ==========================
   // 4. NOTIFICACIÓN A BARRA
-  // ==========================
   await Notificacion.create({
     mensaje: "Nuevo pedido en mesa " + req.body.mesa,
     usuario: req.user.username,
@@ -614,9 +589,7 @@ app.delete("/reset", auth, soloAdminPrincipal, async (req, res) => {
   res.json({ ok: true });
 });
 
-// ==========================
 // SOCKET
-// ==========================
 io.on("connection", (socket) => {
 
   socket.on("actualizar_manual", () => {
@@ -624,7 +597,7 @@ io.on("connection", (socket) => {
   });
 
 });
-// ==========================
+
 const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, () => {

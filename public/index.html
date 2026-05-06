@@ -144,7 +144,6 @@ function verDashboard(){
   cargarDashboard();
 }
 
-// ==========================
 async function cargarDashboard(){
 
   const res = await fetch("/pedidos");
@@ -298,9 +297,7 @@ async function resetSistema(){
   socket.emit("actualizar_manual");
 }
 
-// ==========================
 // PEDIDOS
-// ==========================
 function verPedidos(){
   document.getElementById("contenido").innerHTML = 
 
@@ -490,9 +487,7 @@ async function enviarPedido(){
   }
 }
 
-// ==========================
 // BARRA
-// ==========================
 function verBarra(){
   document.getElementById("contenido").innerHTML = 
   "<h3>Barra</h3>" +
@@ -517,7 +512,7 @@ async function cargarPedidos(){
 
   data.forEach(p => {
 
-
+    if(p.estado === "entregado") return;
 
     let color = "#300";
     if(p.estado === "preparando") color = "#663300";
@@ -579,7 +574,7 @@ async function cargarPedidos(){
     }
 
     cont.appendChild(div);
-    
+
   });
 
   // 🔥 AUTO SCROLL
@@ -637,9 +632,7 @@ async function cargarPedidosMesero(){
 
 }
 
-// ==========================
 // INVENTARIO
-// ==========================
 function verInventario(){
   document.getElementById("contenido").innerHTML =
   "Nombre <input id='n'><br>" +
@@ -879,16 +872,149 @@ function calcularVuelto(id, total){
 async function confirmarPago(id, monto, metodo, recibido){
 async function cobrarPedido(id, total){
 
-  const monto = prompt("Monto a pagar (Total S/" + total + ")");
-  if(!monto) return;
+  let html = `
+    <h3>💰 Cobrar Pedido</h3>
+    <b>Mesa ${pedido.mesa}</b><br><br>
 
-  const metodo = prompt("Metodo: efectivo o yape");
+    <button onclick="seleccionarTodo()">✅ Seleccionar todo</button>
+    <button onclick="deseleccionarTodo()">❌ Limpiar</button>
 
-  let recibido = null;
+    <h4>Selecciona productos</h4>
+  `;
+
+  let pagado = pedido.totalPagado || 0;
+
+html += `<p>💰 Ya pagado: S/ ${pagado}</p>`;
+html += `<p>🧾 Restante: S/ ${(pedido.total - pagado).toFixed(2)}</p><br>`;
+
+pedido.items.forEach((item) => {
+
+  html += `
+    <input type="checkbox" class="itemCheck" data-precio="${item.precio}">
+    ${item.producto} - S/${Number(item.precio).toFixed(2)}
+    <br>
+  `;
+});
+
+  html += `
+    <br>
+    <button onclick="calcularTotalSeleccionado('${id}')">Calcular total</button>
+
+    <div id="totalSeleccionado"></div>
+  `;
+
+  document.getElementById("contenido").innerHTML = html;
+}
+
+function seleccionarTodo(){
+  document.querySelectorAll(".itemCheck").forEach(c => c.checked = true);
+}
+
+function deseleccionarTodo(){
+  document.querySelectorAll(".itemCheck").forEach(c => c.checked = false);
+}
+
+function calcularTotalSeleccionado(id){
+
+  const checks = document.querySelectorAll(".itemCheck");
+
+  let total = 0;
+
+  checks.forEach(c => {
+    if(c.checked){
+      total += Number(c.dataset.precio);
+    }
+  });
+
+  if(total === 0){
+    alert("Selecciona al menos un producto");
+    return;
+  }
+
+  fetch("/pedidos")
+    .then(res => res.json())
+    .then(data => {
+
+      const pedido = data.find(p => p._id === id);
+
+      const pagado = Number(pedido.totalPagado || 0);
+      const restante = Number(pedido.total) - pagado;
+
+      if(total > restante){
+      total = restante; 
+      total = Number(total.toFixed(2));
+       alert("El total seleccionado excede el restante. Se ajustará a S/ " + total);
+     }
+      
+      total = Number(total.toFixed(2));
+
+      document.getElementById("totalSeleccionado").innerHTML = `
+        <h4>Total: S/ ${total}</h4>
+
+        <button onclick="seleccionarMetodo('yape', '${id}', ${total})">Yape</button>
+        <button onclick="seleccionarMetodo('efectivo', '${id}', ${total})">Efectivo</button>
+      `;
+    });
+}
+
+function seleccionarMetodo(metodo, id, total){
+
+  const zona = document.getElementById("totalSeleccionado");
+
+  if(!zona){
+    alert("Error en interfaz de pago");
+    return;
+  }
+
+  if(metodo === "yape"){
+    zona.innerHTML = `
+      <p>Pago con Yape por S/ ${total}</p>
+      <button onclick="confirmarPago('${id}', ${total}, 'yape', null)">Confirmar</button>
+    `;
+  }
 
   if(metodo === "efectivo"){
-    recibido = prompt("Monto recibido:");
+    zona.innerHTML = `
+      <p>Total: S/ ${total}</p>
+      Recibido: <input id="recibido" type="number"><br><br>
+      <button onclick="calcularVuelto('${id}', ${total})">Calcular vuelto</button>
+      <div id="resultadoVuelto"></div>
+    `;
   }
+}
+
+function calcularVuelto(id, total){
+
+  const input = document.getElementById("recibido");
+
+  if(!input){
+    alert("Error: no se encontró el campo de pago");
+    return;
+  }
+
+  const recibido = parseFloat(input.value);
+
+  if(isNaN(recibido)){
+    alert("Ingresa un monto válido");
+    return;
+  }
+
+  if(recibido < total){
+    alert("Monto insuficiente");
+    return;
+  }
+
+  const vuelto = (recibido - total).toFixed(2);
+
+  document.getElementById("resultadoVuelto").innerHTML = `
+    Vuelto: S/ ${vuelto} <br><br>
+    <button onclick="confirmarPago('${id}', ${total}, 'efectivo', ${recibido})">
+      Confirmar pago
+    </button>
+  `;
+}
+
+async function confirmarPago(id, monto, metodo, recibido){
 
   const res = await fetch("/pedidos/" + id + "/pagar",{
     method:"POST",
@@ -902,7 +1028,7 @@ async function cobrarPedido(id, total){
       recibido
       monto:Number(monto),
       metodo,
-      recibido: recibido ? Number(recibido) : null
+      recibido
     })
   });
 
@@ -955,9 +1081,7 @@ function pagoEfectivoSeparado(id, monto){
   confirmarPago(id, monto, "efectivo", Number(recibido));
 }
 
-// ==========================
 // USUARIOS
-// ==========================
 function verUsuarios(){
   document.getElementById("contenido").innerHTML =
   "<h3>Panel de Usuarios</h3>" +
@@ -1092,9 +1216,7 @@ async function eliminarUsuario(id){
   });
 }
 
-// ==========================
 // INFORMES
-// ==========================
 function verInformes(){
   document.getElementById("contenido").innerHTML =
   "<h3>Reportes</h3>" +
@@ -1172,7 +1294,6 @@ async function eliminarPedido(id){
   await cargarInformes();
 }
 
-// ==========================
 async function cambiarEstado(id,estado){
   await fetch("/pedidos/"+id,{
     method:"PUT",
@@ -1189,9 +1310,7 @@ async function cambiarEstado(id,estado){
   }
 } // 
  
-// ==========================
 // 🔄 ACTUALIZACIONES EN TIEMPO REAL
-// ==========================
 socket.on("actualizar",()=>{
 
   if(document.getElementById("lista")) cargarPedidos();
@@ -1215,7 +1334,7 @@ setInterval(()=>{
     cargarPedidos();
   }
 }, 6000);
-// ==========================
+
 </script>
 
 </body>
