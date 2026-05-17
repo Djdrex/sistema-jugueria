@@ -538,17 +538,23 @@ async function cargarPedidos(){
 
 p.items.forEach(i => {
 
-  let clave = i.producto;
+  let detalles = "";
 
-  if(i.azucar) clave += " | sin azúcar";
-  if(i.helado) clave += " | helado";
-  if(i.nota) clave += " | nota: " + i.nota;
+  if(i.azucar) detalles += " | sin azúcar";
+  if(i.helado) detalles += " | helado";
+  if(i.nota) detalles += " | nota: " + i.nota;
+
+  const clave = i.producto + detalles;
 
   if(!agrupados[clave]){
     agrupados[clave] = 0;
   }
 
   agrupados[clave]++;
+});
+
+Object.entries(agrupados).forEach(([nombre, cantidad]) => {
+  html += cantidad + "x " + nombre + "<br>";
 });
 
 Object.entries(agrupados).forEach(([producto, cantidad]) => {
