@@ -173,6 +173,14 @@ app.put("/productos/:id/stock", auth, soloAdmin, async (req, res) => {
   const { cambio } = req.body;
 
   const p = await Producto.findById(req.params.id);
+  
+  if(producto.stock + cambio < 0){
+
+  return res.json({
+    error:"Stock no puede ser negativo"
+  });
+
+}
 
   if (!p) return res.sendStatus(404);
 

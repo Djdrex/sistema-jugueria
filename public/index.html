@@ -702,7 +702,8 @@ async function cargarProductos(){
 }
 
 async function modificarStock(id, cambio){
-  await fetch("/productos/"+id+"/stock",{
+
+  const res = await fetch("/productos/"+id+"/stock",{
     method:"PUT",
     headers:{
       "Content-Type":"application/json",
@@ -710,6 +711,13 @@ async function modificarStock(id, cambio){
     },
     body:JSON.stringify({cambio})
   });
+
+  const data = await res.json();
+
+  if(data.error){
+    alert("❌ " + data.error);
+    return;
+  }
 
   cargarProductos();
 }
