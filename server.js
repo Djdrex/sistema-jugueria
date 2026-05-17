@@ -31,6 +31,8 @@ mongoose.connect(process.env.MONGO_URI, {
   .catch(err => console.log("🔴 Error Mongo:", err));
 
 // MODELOS
+const Actividad = require("./models/Actividad");
+
 const Usuario = mongoose.model("Usuario", {
   username: String,
   password: String,
