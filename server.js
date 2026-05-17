@@ -86,6 +86,26 @@ const Caja = mongoose.model("Caja", {
   cerradoPor: String
 });
 
+const Notificacion = mongoose.model("Notificacion", {
+
+  mensaje: String,
+
+  usuario: String,
+
+  rol: String,
+
+  leido: {
+    type: Boolean,
+    default: false
+  },
+
+  fecha: {
+    type: Date,
+    default: Date.now
+  }
+
+});
+
 async function registrarActividad(usuario, accion, detalle){
 
   try{

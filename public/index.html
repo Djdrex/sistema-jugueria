@@ -538,28 +538,38 @@ async function cargarPedidos(){
 
 p.items.forEach(i => {
 
-  let detalles = "";
+  let detalles = [];
 
-  if(i.azucar) detalles += " | sin azúcar";
-  if(i.helado) detalles += " | helado";
-  if(i.nota) detalles += " | nota: " + i.nota;
-
-  const clave = i.producto + detalles;
-
-  if(!agrupados[clave]){
-    agrupados[clave] = 0;
+  if(i.azucar){
+    detalles.push("sin azúcar");
   }
 
-  agrupados[clave]++;
+  if(i.helado){
+    detalles.push("helado");
+  }
+
+  if(i.nota && i.nota.trim() !== ""){
+    detalles.push(i.nota);
+  }
+
+  let textoFinal = i.producto;
+
+  if(detalles.length > 0){
+    textoFinal += " (" + detalles.join(", ") + ")";
+  }
+
+  if(!agrupados[textoFinal]){
+    agrupados[textoFinal] = 0;
+  }
+
+  agrupados[textoFinal]++;
 });
 
 Object.entries(agrupados).forEach(([nombre, cantidad]) => {
   html += cantidad + "x " + nombre + "<br>";
 });
 
-Object.entries(agrupados).forEach(([producto, cantidad]) => {
-  html += "- " + producto + " x" + cantidad + "<br>";
-});
+
 
     div.innerHTML = html;
 
