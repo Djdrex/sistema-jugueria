@@ -892,7 +892,16 @@ function seleccionarMetodo(metodo, id, total, indices){
   if(metodo === "yape"){
     zona.innerHTML = `
       <p>Pago con Yape por S/ ${total}</p>
-      <button onclick="confirmarPago('${id}', ${total}, 'yape', null, ${JSON.stringify(indices)})">Confirmar</button>
+      <button id="btnConfirmarPago"
+onclick="confirmarPago(
+  '${id}',
+  ${total},
+  'yape',
+  null,
+  ${JSON.stringify(indices)}
+)">
+Confirmar
+</button>
     `;
   }
 
@@ -931,19 +940,27 @@ function calcularVuelto(id, total, indices){
 
   document.getElementById("resultadoVuelto").innerHTML = `
     Vuelto: S/ ${vuelto} <br><br>
-    <button onclick="confirmarPago(
+    <button id="btnConfirmarPago"
+onclick="confirmarPago(
   '${id}',
   ${total},
   'efectivo',
   ${recibido},
   ${JSON.stringify(indices)}
 )">
-      Confirmar pago
-    </button>
+Confirmar pago
+</button>
   `;
 }
 
 async function confirmarPago(id, monto, metodo, recibido, indices){
+  
+  const btn = document.getElementById("btnConfirmarPago");
+
+if(btn){
+  btn.disabled = true;
+  btn.innerText = "Procesando...";
+}
 
   const res = await fetch("/pedidos/" + id + "/pagar",{
     method:"POST",
@@ -962,6 +979,10 @@ async function confirmarPago(id, monto, metodo, recibido, indices){
   const data = await res.json();
 
   if(data.error){
+    if(btn){
+  btn.disabled = false;
+  btn.innerText = "Confirmar";
+}
     alert("❌ " + data.error);
   } else {
     alert("✅ Pago registrado");
