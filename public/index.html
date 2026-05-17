@@ -740,6 +740,40 @@ async function cobrarPedido(id, pedido){
 
   html += `<p>💰 Ya pagado: S/ ${pagado}</p>`;
   html += `<p>🧾 Restante: S/ ${(pedido.total - pagado).toFixed(2)}</p><br>`;
+  html += "<h4>💰 Pagos realizados</h4>";
+
+if(pedido.pagos && pedido.pagos.length > 0){
+
+  pedido.pagos.forEach(p => {
+
+    html += `
+      <div style="
+        border:1px solid gray;
+        padding:5px;
+        margin-bottom:5px;
+        border-radius:5px;
+      ">
+
+        Método: ${p.metodo}<br>
+        Monto: S/${Number(p.monto).toFixed(2)}<br>
+
+        ${p.recibido ? `
+          Recibido: S/${Number(p.recibido).toFixed(2)}<br>
+          Vuelto: S/${Number(p.vuelto).toFixed(2)}<br>
+        ` : ""}
+
+        Mesero: ${p.mesero || "Desconocido"}
+
+      </div>
+    `;
+
+  });
+
+}else{
+
+  html += "<p>No hay pagos registrados</p>";
+
+}
 
   pedido.items.forEach((item, index) => {
 
