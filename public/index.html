@@ -378,9 +378,10 @@ function agregarProducto(){
   if(!productoSeleccionado) return;
 
   let item = {
-    producto: productoSeleccionado.nombre,
-    precio: productoSeleccionado.precio
-  };
+  producto: productoSeleccionado.nombre,
+  precio: productoSeleccionado.precio,
+  pagado:true
+};
 
   if(productoSeleccionado.categoria && productoSeleccionado.categoria.toLowerCase() === "jugo"){
     item.azucar = document.getElementById("azucar").checked;
@@ -740,14 +741,30 @@ async function cobrarPedido(id, pedido){
   html += `<p>💰 Ya pagado: S/ ${pagado}</p>`;
   html += `<p>🧾 Restante: S/ ${(pedido.total - pagado).toFixed(2)}</p><br>`;
 
-  pedido.items.forEach((item) => {
+  pedido.items.forEach((item, index) => {
+
+  // 🔥 SI YA ESTÁ PAGADO
+  if(item.pagado){
 
     html += `
-      <input type="checkbox" class="itemCheck" data-precio="${item.precio}">
-      ${item.producto} - S/${Number(item.precio).toFixed(2)}
-      <br>
+      <div style="opacity:0.5;color:lightgreen">
+        ✅ ${item.producto} - PAGADO
+      </div>
     `;
-  });
+
+    return;
+  }
+      html += `
+    <input 
+      type="checkbox" 
+      class="itemCheck" 
+      data-index="${index}"
+      data-precio="${item.precio}"
+    >
+    ${item.producto} - S/${Number(item.precio).toFixed(2)}
+    <br>
+  `;
+    });
 
   html += `
     <br>
@@ -755,6 +772,7 @@ async function cobrarPedido(id, pedido){
 
     <div id="totalSeleccionado"></div>
   `;
+   
 
   document.getElementById("contenido").innerHTML = html;
 }
@@ -772,12 +790,19 @@ function calcularTotalSeleccionado(id){
   const checks = document.querySelectorAll(".itemCheck");
 
   let total = 0;
+  let indicesSeleccionados = [];
 
   checks.forEach(c => {
-    if(c.checked){
-      total += Number(c.dataset.precio);
-    }
-  });
+
+  if(c.checked){
+
+    total += Number(c.dataset.precio);
+
+    indicesSeleccionados.push(
+      Number(c.dataset.index)
+    );
+  }
+});
 
   if(total === 0){
     alert("Selecciona al menos un producto");
@@ -804,13 +829,24 @@ function calcularTotalSeleccionado(id){
       document.getElementById("totalSeleccionado").innerHTML = `
         <h4>Total: S/ ${total}</h4>
 
-        <button onclick="seleccionarMetodo('yape', '${id}', ${total})">Yape</button>
-        <button onclick="seleccionarMetodo('efectivo', '${id}', ${total})">Efectivo</button>
+        <button onclick='seleccionarMetodo(
+  "yape",
+  "${id}",
+  ${total},
+  ${JSON.stringify(indicesSeleccionados)}
+)'>Yape</button>
+
+<button onclick='seleccionarMetodo(
+  "efectivo",
+  "${id}",
+  ${total},
+  ${JSON.stringify(indicesSeleccionados)}
+)'>Efectivo</button>
       `;
     });
 }
 
-function seleccionarMetodo(metodo, id, total){
+function seleccionarMetodo(metodo, id, total, indices){
 
   const zona = document.getElementById("totalSeleccionado");
 
@@ -822,7 +858,7 @@ function seleccionarMetodo(metodo, id, total){
   if(metodo === "yape"){
     zona.innerHTML = `
       <p>Pago con Yape por S/ ${total}</p>
-      <button onclick="confirmarPago('${id}', ${total}, 'yape', null)">Confirmar</button>
+      <button onclick="confirmarPago('${id}', ${total}, 'yape', null, ${JSON.stringify(indices)})">Confirmar</button>
     `;
   }
 
@@ -830,13 +866,13 @@ function seleccionarMetodo(metodo, id, total){
     zona.innerHTML = `
       <p>Total: S/ ${total}</p>
       Recibido: <input id="recibido" type="number"><br><br>
-      <button onclick="calcularVuelto('${id}', ${total})">Calcular vuelto</button>
+      <button onclick="calcularVuelto('${id}', ${total}, ${JSON.stringify(indices)})">Calcular vuelto</button>
       <div id="resultadoVuelto"></div>
     `;
   }
 }
 
-function calcularVuelto(id, total){
+function calcularVuelto(id, total, indices){
 
   const input = document.getElementById("recibido");
 
@@ -861,13 +897,19 @@ function calcularVuelto(id, total){
 
   document.getElementById("resultadoVuelto").innerHTML = `
     Vuelto: S/ ${vuelto} <br><br>
-    <button onclick="confirmarPago('${id}', ${total}, 'efectivo', ${recibido})">
+    <button onclick="confirmarPago(
+  '${id}',
+  ${total},
+  'efectivo',
+  ${recibido},
+  ${JSON.stringify(indices)}
+)">
       Confirmar pago
     </button>
   `;
 }
 
-async function confirmarPago(id, monto, metodo, recibido){
+async function confirmarPago(id, monto, metodo, recibido, indices){
 
   const res = await fetch("/pedidos/" + id + "/pagar",{
     method:"POST",
@@ -876,10 +918,11 @@ async function confirmarPago(id, monto, metodo, recibido){
       "Authorization":token
     },
     body:JSON.stringify({
-    monto:Number(monto),
-    metodo,
-    recibido
-  })
+  monto:Number(monto),
+  metodo,
+  recibido,
+  indices
+})
   });
 
   const data = await res.json();

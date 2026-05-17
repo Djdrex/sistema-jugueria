@@ -215,7 +215,7 @@ app.post("/pedidos/:id/pagar", auth, (req, res, next) => {
   next();
 }, async (req, res) => {
 
-  const { monto, metodo, recibido } = req.body;
+  const { monto, metodo, recibido, indices } = req.body;
 
   const pedido = await Pedido.findById(req.params.id);
 
@@ -259,6 +259,18 @@ app.post("/pedidos/:id/pagar", auth, (req, res, next) => {
   });
 
   pedido.totalPagado += monto;
+  
+  if(Array.isArray(indices)){
+
+  indices.forEach(i => {
+
+    if(pedido.items[i]){
+      pedido.items[i].pagado = true;
+    }
+
+  });
+
+  }
 
   if (pedido.totalPagado >= pedido.total) {
     pedido.pagado = true;
