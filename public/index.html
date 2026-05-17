@@ -399,12 +399,37 @@ function agregarProducto(){
 
 // PREVIEW
 function renderPreview(){
+
   const cont = document.getElementById("preview");
+
   cont.innerHTML="";
 
   pedidoActual.forEach((i,index)=>{
-    cont.innerHTML += i.producto + " S/" + i.precio +
-    " <button onclick='eliminarItem(" + index + ")'>❌</button><br>";
+
+    let extras = [];
+
+    if(i.azucar){
+      extras.push("sin azúcar");
+    }
+
+    if(i.helado){
+      extras.push("helado");
+    }
+
+    if(i.nota){
+      extras.push(i.nota);
+    }
+
+    let texto = i.producto;
+
+    if(extras.length > 0){
+      texto += " (" + extras.join(", ") + ")";
+    }
+
+    cont.innerHTML +=
+      texto +
+      " S/" + i.precio +
+      " <button onclick='eliminarItem(" + index + ")'>❌</button><br>";
   });
 }
 
@@ -540,33 +565,47 @@ p.items.forEach(i => {
 
   let detalles = [];
 
-  if(i.azucar){
+  // SIN AZÚCAR
+  if(i.azucar === true){
     detalles.push("sin azúcar");
   }
 
-  if(i.helado){
+  // HELADO
+  if(i.helado === true){
     detalles.push("helado");
   }
 
+  // NOTA EXTRA
   if(i.nota && i.nota.trim() !== ""){
-    detalles.push(i.nota);
+    detalles.push(i.nota.trim());
   }
 
-  let textoFinal = i.producto;
+  let clave = i.producto;
 
   if(detalles.length > 0){
-    textoFinal += " (" + detalles.join(", ") + ")";
+    clave += " | " + detalles.join(" | ");
   }
 
-  if(!agrupados[textoFinal]){
-    agrupados[textoFinal] = 0;
+  if(!agrupados[clave]){
+    agrupados[clave] = {
+      cantidad: 0,
+      producto: i.producto,
+      detalles
+    };
   }
 
-  agrupados[textoFinal]++;
+  agrupados[clave].cantidad++;
 });
 
-Object.entries(agrupados).forEach(([nombre, cantidad]) => {
-  html += cantidad + "x " + nombre + "<br>";
+Object.values(agrupados).forEach(g => {
+
+  html += g.cantidad + "x " + g.producto;
+
+  if(g.detalles.length > 0){
+    html += " <small>(" + g.detalles.join(", ") + ")</small>";
+  }
+
+  html += "<br>";
 });
 
 
