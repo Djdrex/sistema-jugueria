@@ -563,38 +563,35 @@ async function cargarPedidos(){
 
 p.items.forEach(i => {
 
-  let detalles = [];
+  let extras = [];
 
-  // SIN AZÚCAR
-  if(i.azucar === true){
-    detalles.push("sin azúcar");
+  if(i.azucar){
+    extras.push("Sin azúcar");
   }
 
-  // HELADO
-  if(i.helado === true){
-    detalles.push("helado");
+  if(i.helado){
+    extras.push("Helado");
   }
 
-  // NOTA EXTRA
   if(i.nota && i.nota.trim() !== ""){
-    detalles.push(i.nota.trim());
+    extras.push(i.nota.trim());
   }
 
-  let clave = i.producto;
+  let nombreFinal = i.producto;
 
-  if(detalles.length > 0){
-    clave += " | " + detalles.join(" | ");
+  if(extras.length > 0){
+    nombreFinal += " (" + extras.join(", ") + ")";
   }
 
-  if(!agrupados[clave]){
-    agrupados[clave] = {
-      cantidad: 0,
-      producto: i.producto,
-      detalles
-    };
+  if(!agrupados[nombreFinal]){
+    agrupados[nombreFinal] = 0;
   }
 
-  agrupados[clave].cantidad++;
+  agrupados[nombreFinal]++;
+});
+
+Object.entries(agrupados).forEach(([nombre, cantidad]) => {
+  html += cantidad + "x " + nombre + "<br>";
 });
 
 Object.values(agrupados).forEach(g => {
