@@ -534,13 +534,26 @@ async function cargarPedidos(){
     let fecha = new Date(p.fecha);
     html += (isNaN(fecha) ? "Fecha inválida" : fecha.toLocaleString()) + "<br><br>";
 
-    p.items.forEach(i => {
-      html += "- " + String(i.producto);
-      if(i.azucar) html += " | sin azúcar";
-      if(i.helado) html += " | helado";
-      if(i.nota) html += " | nota: " + String(i.nota);
-      html += "<br>";
-    });
+    const agrupados = {};
+
+p.items.forEach(i => {
+
+  let clave = i.producto;
+
+  if(i.azucar) clave += " | sin azúcar";
+  if(i.helado) clave += " | helado";
+  if(i.nota) clave += " | nota: " + i.nota;
+
+  if(!agrupados[clave]){
+    agrupados[clave] = 0;
+  }
+
+  agrupados[clave]++;
+});
+
+Object.entries(agrupados).forEach(([producto, cantidad]) => {
+  html += "- " + producto + " x" + cantidad + "<br>";
+});
 
     div.innerHTML = html;
 
