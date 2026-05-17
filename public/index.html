@@ -122,7 +122,7 @@ function cargarTabs(){
     html += "<button onclick='verInventario()'>Inventario</button>";
     html += "<button onclick='verInformes()'>Informes</button>";
     html += "<button onclick='verUsuarios()'>Usuarios</button>";
-    html += "<button onclick='verDashboard()'>Dashboard</button>";
+    html += "<button onclick='verActividad()'>Actividad</button>";
     html += "<button onclick='resetSistema()'>RESET</button>";
   }
 
@@ -1175,6 +1175,49 @@ function verInformes(){
   "<button onclick='generarReporte()'>Generar</button>" +
 
   "<div id='resultadoReporte'></div>";
+}
+
+async function verActividad(){
+
+  document.getElementById("contenido").innerHTML =
+    "<h3>Actividad del sistema</h3>" +
+    "<div id='listaActividad'></div>";
+
+  const res = await fetch("/actividad",{
+    headers:{
+      "Authorization":token
+    }
+  });
+
+  const data = await res.json();
+
+  const cont = document.getElementById("listaActividad");
+
+  data.forEach(a=>{
+
+    cont.innerHTML += `
+      <div style="
+        border:1px solid gray;
+        padding:8px;
+        margin:5px;
+        border-radius:5px;
+      ">
+
+        <b>${a.usuario}</b><br>
+
+        Acción: ${a.accion}<br>
+
+        ${a.detalle}<br>
+
+        <small>
+          ${new Date(a.fecha).toLocaleString()}
+        </small>
+
+      </div>
+    `;
+
+  });
+
 }
 
 async function generarReporte(){

@@ -86,6 +86,24 @@ const Caja = mongoose.model("Caja", {
   cerradoPor: String
 });
 
+async function registrarActividad(usuario, accion, detalle){
+
+  try{
+
+    await Actividad.create({
+      usuario,
+      accion,
+      detalle
+    });
+
+  }catch(err){
+
+    console.log("Error registrando actividad:", err);
+
+  }
+
+}
+
 // ADMIN
 async function crearAdmin() {
   // 1. Encriptamos la contraseña que tienes en tu archivo .env
@@ -279,6 +297,18 @@ app.post("/pedidos/:id/pagar", auth, (req, res, next) => {
   }
 
   await pedido.save();
+  
+  await registrarActividad(
+  req.user.username,
+  "PEDIDO",
+  `Creó pedido para mesa ${pedido.mesa}`
+);
+
+  await registrarActividad(
+  req.user.username,
+  "COBRO",
+  `Cobró S/${monto} en mesa ${pedido.mesa} por ${metodo}`
+);
 
   res.json(pedido);
 });
@@ -347,6 +377,21 @@ app.delete("/productos/:id", auth, soloAdmin, async (req, res) => {
   await Producto.findByIdAndDelete(req.params.id);
   io.emit("actualizar");
   res.json({ ok: true });
+});
+
+app.get("/actividad", auth, async (req,res)=>{
+
+  if(req.user.rol !== "admin"){
+    return res.sendStatus(403);
+  }
+
+  const actividad = await Actividad
+    .find()
+    .sort({ fecha:-1 })
+    .limit(100);
+
+  res.json(actividad);
+
 });
 
 // 👤 USUARIOS (ADMIN)
