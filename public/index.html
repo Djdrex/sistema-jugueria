@@ -303,7 +303,7 @@ function verPedidos(){
 
   "<h3>Crear Pedido</h3>" +
 
-  "Mesa:<input id='mesa'><br><br>" +
+
   "Mesa:<input id='mesa' placeholder='Ej: 1, 2, 10'><br><br>" +
 
   "Buscar:<input id='buscador' onkeyup='buscarProducto()'><br>" +
@@ -566,7 +566,7 @@ async function cargarPedidos(){
     if(p.estado === "entregado" && !p.pagado){
     const btnCobrar = document.createElement("button");
     btnCobrar.innerText = "💰 Cobrar";
-    btnCobrar.onclick = () => cobrarPedido(p._id, p.total);
+    btnCobrar.onclick = () => cobrarPedido(p._id, p);
     div.appendChild(btnCobrar);
     }
 
@@ -722,152 +722,8 @@ async function eliminarProducto(id){
   cargarProductos();
 }
 
-function cobrarPedido(id, pedido){
 
-  let html = `
-    <h3>💰 Cobrar Pedido</h3>
-    <b>Mesa ${pedido.mesa}</b><br><br>
-
-    <button onclick="seleccionarTodo()">✅ Seleccionar todo</button>
-    <button onclick="deseleccionarTodo()">❌ Limpiar</button>
-
-    <h4>Selecciona productos</h4>
-  `;
-
-  let pagado = pedido.totalPagado || 0;
-
-html += `<p>💰 Ya pagado: S/ ${pagado}</p>`;
-html += `<p>🧾 Restante: S/ ${(pedido.total - pagado).toFixed(2)}</p><br>`;
-
-pedido.items.forEach((item) => {
-
-  html += `
-    <input type="checkbox" class="itemCheck" data-precio="${item.precio}">
-    ${item.producto} - S/${Number(item.precio).toFixed(2)}
-    <br>
-  `;
-});
-
-  html += `
-    <br>
-    <button onclick="calcularTotalSeleccionado('${id}')">Calcular total</button>
-
-    <div id="totalSeleccionado"></div>
-  `;
-
-  document.getElementById("contenido").innerHTML = html;
-}
-
-function seleccionarTodo(){
-  document.querySelectorAll(".itemCheck").forEach(c => c.checked = true);
-}
-
-function deseleccionarTodo(){
-  document.querySelectorAll(".itemCheck").forEach(c => c.checked = false);
-}
-
-function calcularTotalSeleccionado(id){
-
-  const checks = document.querySelectorAll(".itemCheck");
-
-  let total = 0;
-
-  checks.forEach(c => {
-    if(c.checked){
-      total += Number(c.dataset.precio);
-    }
-  });
-
-  if(total === 0){
-    alert("Selecciona al menos un producto");
-    return;
-  }
-
-  fetch("/pedidos")
-    .then(res => res.json())
-    .then(data => {
-
-      const pedido = data.find(p => p._id === id);
-
-      const pagado = Number(pedido.totalPagado || 0);
-      const restante = Number(pedido.total) - pagado;
-
-      if(total > restante){
-      total = restante; 
-      total = Number(total.toFixed(2));
-       alert("El total seleccionado excede el restante. Se ajustará a S/ " + total);
-     }
-      
-      total = Number(total.toFixed(2));
-
-      document.getElementById("totalSeleccionado").innerHTML = `
-        <h4>Total: S/ ${total}</h4>
-
-        <button onclick="seleccionarMetodo('yape', '${id}', ${total})">Yape</button>
-        <button onclick="seleccionarMetodo('efectivo', '${id}', ${total})">Efectivo</button>
-      `;
-    });
-}
-
-function seleccionarMetodo(metodo, id, total){
-
-  const zona = document.getElementById("totalSeleccionado");
-
-  if(!zona){
-    alert("Error en interfaz de pago");
-    return;
-  }
-
-  if(metodo === "yape"){
-    zona.innerHTML = `
-      <p>Pago con Yape por S/ ${total}</p>
-      <button onclick="confirmarPago('${id}', ${total}, 'yape', null)">Confirmar</button>
-    `;
-  }
-
-  if(metodo === "efectivo"){
-    zona.innerHTML = `
-      <p>Total: S/ ${total}</p>
-      Recibido: <input id="recibido" type="number"><br><br>
-      <button onclick="calcularVuelto('${id}', ${total})">Calcular vuelto</button>
-      <div id="resultadoVuelto"></div>
-    `;
-  }
-}
-
-function calcularVuelto(id, total){
-
-  const input = document.getElementById("recibido");
-
-  if(!input){
-    alert("Error: no se encontró el campo de pago");
-    return;
-  }
-
-  const recibido = parseFloat(input.value);
-
-  if(isNaN(recibido)){
-    alert("Ingresa un monto válido");
-    return;
-  }
-
-  if(recibido < total){
-    alert("Monto insuficiente");
-    return;
-  }
-
-  const vuelto = (recibido - total).toFixed(2);
-
-  document.getElementById("resultadoVuelto").innerHTML = `
-    Vuelto: S/ ${vuelto} <br><br>
-    <button onclick="confirmarPago('${id}', ${total}, 'efectivo', ${recibido})">
-      Confirmar pago
-    </button>
-  `;
-}
-
-
-async function cobrarPedido(id, total){
+async function cobrarPedido(id, total){ 
 
   let html = `
     <h3>💰 Cobrar Pedido</h3>
