@@ -594,16 +594,6 @@ Object.entries(agrupados).forEach(([nombre, cantidad]) => {
   html += cantidad + "x " + nombre + "<br>";
 });
 
-Object.values(agrupados).forEach(g => {
-
-  html += g.cantidad + "x " + g.producto;
-
-  if(g.detalles.length > 0){
-    html += " <small>(" + g.detalles.join(", ") + ")</small>";
-  }
-
-  html += "<br>";
-});
 
 
 
