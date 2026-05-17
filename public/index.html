@@ -723,7 +723,7 @@ async function eliminarProducto(id){
 }
 
 
-async function cobrarPedido(id, total){ 
+async function cobrarPedido(id, pedido){ 
 
   let html = `
     <h3>💰 Cobrar Pedido</h3>
@@ -737,17 +737,17 @@ async function cobrarPedido(id, total){
 
   let pagado = pedido.totalPagado || 0;
 
-html += `<p>💰 Ya pagado: S/ ${pagado}</p>`;
-html += `<p>🧾 Restante: S/ ${(pedido.total - pagado).toFixed(2)}</p><br>`;
+  html += `<p>💰 Ya pagado: S/ ${pagado}</p>`;
+  html += `<p>🧾 Restante: S/ ${(pedido.total - pagado).toFixed(2)}</p><br>`;
 
-pedido.items.forEach((item) => {
+  pedido.items.forEach((item) => {
 
-  html += `
-    <input type="checkbox" class="itemCheck" data-precio="${item.precio}">
-    ${item.producto} - S/${Number(item.precio).toFixed(2)}
-    <br>
-  `;
-});
+    html += `
+      <input type="checkbox" class="itemCheck" data-precio="${item.precio}">
+      ${item.producto} - S/${Number(item.precio).toFixed(2)}
+      <br>
+    `;
+  });
 
   html += `
     <br>
