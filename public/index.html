@@ -337,23 +337,20 @@ async function buscarProducto(){
   cont.innerHTML = "";
 
   productosCache.forEach(p=>{
+  if(p.nombre && p.nombre.toLowerCase().includes(texto)){
 
-  productos.forEach(p=>{
-    if(p.nombre && p.nombre.toLowerCase().includes(texto)){
+    const btn = document.createElement("button");
 
-      const btn = document.createElement("button");
+    btn.innerText = p.nombre + " - S/" + p.precio;
 
-      btn.innerText = p.nombre + " - S/" + p.precio;
+    btn.onclick = function(){
+      seleccionarProducto(p.nombre, p.precio, p.categoria);
+    };
 
-      btn.onclick = function(){
-        seleccionarProducto(p.nombre, p.precio, p.categoria);
-      };
-
-      cont.appendChild(btn);
-
-      cont.appendChild(document.createElement("br"));
-    }
-  });
+    cont.appendChild(btn);
+    cont.appendChild(document.createElement("br"));
+  }
+});
 }
 
 // SELECCIONAR
@@ -869,7 +866,7 @@ function calcularVuelto(id, total){
   `;
 }
 
-async function confirmarPago(id, monto, metodo, recibido){
+
 async function cobrarPedido(id, total){
 
   let html = `
@@ -1023,13 +1020,10 @@ async function confirmarPago(id, monto, metodo, recibido){
       "Authorization":token
     },
     body:JSON.stringify({
-      monto,
-      metodo,
-      recibido
-      monto:Number(monto),
-      metodo,
-      recibido
-    })
+    monto:Number(monto),
+    metodo,
+    recibido
+  })
   });
 
   const data = await res.json();
@@ -1339,4 +1333,4 @@ setInterval(()=>{
 
 </body>
 </html>
-</html>
+
