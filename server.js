@@ -13,6 +13,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 const SECRET = process.env.JWT_SECRET;
+const productosRoutes = require("./routes/productos");
 
 const {
   auth,
@@ -30,6 +31,7 @@ const io = new Server(server);
 // MIDDLEWARES
 app.use(express.json());
 app.use(cors());
+app.use("/productos", productosRoutes(io));
 
 // DB
 mongoose.connect(process.env.MONGO_URI, {
@@ -128,29 +130,6 @@ app.post("/login", async (req, res) => {
     rol: u.rol,
     username: u.username
   });
-});
-
-app.put("/productos/:id/stock", auth, soloAdmin, async (req, res) => {
-  const { cambio } = req.body;
-
-  const p = await Producto.findById(req.params.id);
-  
-  if(p.stock + cambio < 0){
-
-  return res.json({
-    error:"Stock no puede ser negativo"
-  });
-
-}
-
-  if (!p) return res.sendStatus(404);
-
-  p.stock = Math.max(0, p.stock + cambio);
-
-  await p.save();
-
-  io.emit("actualizar");
-  res.json({ ok: true });
 });
 
 app.put("/pedidos/:id", auth, soloBarra, async (req, res) => {
@@ -290,21 +269,10 @@ app.post("/pedidos/:id/pagar", auth, (req, res, next) => {
 
 
 // PRODUCTOS
-app.post("/productos", auth, soloAdmin, async (req, res) => {
-  const p = await Producto.create(req.body);
-  io.emit("actualizar");
-  res.json(p);
-});
 
-app.get("/productos", async (req, res) => {
-  res.json(await Producto.find());
-});
 
-app.delete("/productos/:id", auth, soloAdmin, async (req, res) => {
-  await Producto.findByIdAndDelete(req.params.id);
-  io.emit("actualizar");
-  res.json({ ok: true });
-});
+
+
 
 app.get("/actividad", auth, async (req,res)=>{
 
