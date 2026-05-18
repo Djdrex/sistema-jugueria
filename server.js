@@ -14,6 +14,14 @@ const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 const SECRET = process.env.JWT_SECRET;
 
+const {
+  auth,
+  soloAdmin,
+  soloAdminPrincipal,
+  soloBarra,
+  soloMesero
+} = require("./middlewares/auth");
+
 // APP
 const app = express();
 const server = http.createServer(app);
@@ -276,52 +284,10 @@ app.post("/pedidos/:id/pagar", auth, (req, res, next) => {
 
 
 // 🔐 MIDDLEWARE AUTH
-function auth(req, res, next) {
 
-  const token = req.headers.authorization;
-
-  if (!token) {
-    return res.sendStatus(401);
-  }
-
-  try {
-    const decoded = jwt.verify(token, SECRET);
-    req.user = decoded;
-    next();
-  } catch (err) {
-    return res.sendStatus(403);
-  }
-
-}
 
 // 🎭 ROLES
-function soloAdminPrincipal(req, res, next) {
-  if (req.user.username !== "admin@titan02") {
-    return res.status(403).json({ error: "Solo el admin principal puede hacer esto" });
-  }
-  next();
-}
 
-function soloAdmin(req, res, next) {
-  if (req.user.rol !== "admin") {
-    return res.sendStatus(403);
-  }
-  next();
-}
-
-function soloBarra(req, res, next) {
-  if (req.user.rol !== "barra" && req.user.rol !== "admin") {
-    return res.sendStatus(403);
-  }
-  next();
-}
-
-function soloMesero(req, res, next) {
-  if (req.user.rol !== "mesero" && req.user.rol !== "admin") {
-    return res.sendStatus(403);
-  }
-  next();
-}
 
 // PRODUCTOS
 app.post("/productos", auth, soloAdmin, async (req, res) => {
