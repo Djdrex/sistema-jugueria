@@ -14,6 +14,7 @@ const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 const SECRET = process.env.JWT_SECRET;
 const productosRoutes = require("./routes/productos");
+const pedidosRoutes = require("./routes/pedidos");
 
 const {
   auth,
@@ -32,6 +33,7 @@ const io = new Server(server);
 app.use(express.json());
 app.use(cors());
 app.use("/productos", productosRoutes(io));
+app.use("/pedidos", pedidosRoutes(io));
 
 // DB
 mongoose.connect(process.env.MONGO_URI, {
@@ -132,18 +134,7 @@ app.post("/login", async (req, res) => {
   });
 });
 
-app.put("/pedidos/:id", auth, soloBarra, async (req, res) => {
-  const { estado } = req.body;
-  await Pedido.findByIdAndUpdate(req.params.id, { estado });
-  io.emit("actualizar");
-  res.json({ ok: true });
-});
 
-app.delete("/pedidos/:id", auth, soloAdmin, async (req, res) => {
-  await Pedido.findByIdAndDelete(req.params.id);
-  io.emit("actualizar");
-  res.json({ ok: true });
-});
 
 app.post("/caja/cerrar", auth, soloAdmin, async (req, res) => {
 
@@ -425,9 +416,7 @@ app.delete("/notificaciones", auth, async (req, res) => {
 });
 
 // PEDIDOS
-app.get("/pedidos", async (req, res) => {
-  res.json(await Pedido.find());
-});
+
 
 app.get("/reporte", auth, soloAdmin, async (req, res) => {
 
@@ -465,66 +454,6 @@ app.get("/reporte", auth, soloAdmin, async (req, res) => {
 
 });
 
-app.post("/pedidos", auth, soloMesero, async (req, res) => {
-
-  let total = 0;
-  req.body.items.forEach(i => total += i.precio);
-
-
-  // VALIDAR Y DESCONTAR STOCK 
-
-  // 1. Contar productos repetidos
-  const conteo = {};
-
-  req.body.items.forEach(i => {
-    conteo[i.producto] = (conteo[i.producto] || 0) + 1;
-  });
-
-  // 2. Validar y descontar stock en UNA sola operación por producto
-  for (let nombre in conteo) {
-    const cantidad = conteo[nombre];
-
-    const prod = await Producto.findOneAndUpdate(
-      { nombre, stock: { $gte: cantidad } },
-      { $inc: { stock: -cantidad } },
-      { returnDocument: "after" }
-    );
-
-    if (!prod) {
-      return res.status(400).json({ error: "Stock insuficiente de " + nombre });
-    }
-
-    // 🔔 Notificación stock bajo
-    if (prod.stock <= 5) {
-      await Notificacion.create({
-        mensaje: "⚠️ Stock bajo: " + prod.nombre + " (" + prod.stock + ")",
-        usuario: "sistema",
-        rol: "admin",
-        fecha: new Date()
-      });
-    }
-  }
-
-  // 2. CREAR PEDIDO
-  const p = await Pedido.create({
-    ...req.body,
-    creadoPor: req.user.username,
-    total,
-    estado: "en_espera"
-  });
-
-
-  // 4. NOTIFICACIÓN A BARRA
-  await Notificacion.create({
-    mensaje: "Nuevo pedido en mesa " + req.body.mesa,
-    usuario: req.user.username,
-    rol: "barra",
-    fecha: new Date()
-  });
-
-  io.emit("actualizar");
-  res.json(p);
-});
 
 
 // 🔄 RESET SISTEMA (SOLO ADMIN)
