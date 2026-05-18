@@ -33,78 +33,11 @@ mongoose.connect(process.env.MONGO_URI, {
 // MODELOS
 const Actividad = require("./models/Actividad");
 
-const Usuario = mongoose.model("Usuario", {
-  username: String,
-  password: String,
-  rol: String
-});
-
-const Producto = mongoose.model("Producto", {
-  nombre: String,
-  precio: Number,
-  stock: Number,
-  categoria: String
-});
-
-const Pedido = mongoose.model("Pedido", {
-  mesa: String,
-  estado: { type: String, default: "en_espera" },
-  creadoPor: String,
-  total: Number,
-
-  
-  // 🔥 NUEVO
-  totalPagado: { type: Number, default: 0 },
-  pagado: { type: Boolean, default: false },
-
-  pagos: [
-    {
-      monto: Number,
-      metodo: String,
-      recibido: Number,
-      vuelto: Number,
-      mesero: String,
-      fecha: { type: Date, default: Date.now }
-    }
-  ],
-
-  items: [
-    {
-      producto: String,
-      precio: Number,
-      pagado: { type: Number, default: 0 } // opcional (para futuro)
-    }
-  ],
-
-  fecha: { type: Date, default: Date.now }
-});
-
-const Caja = mongoose.model("Caja", {
-  fecha: { type: Date, default: Date.now },
-  totalVentas: Number,
-  cantidadPedidos: Number,
-  cerradoPor: String
-});
-
-const Notificacion = mongoose.model("Notificacion", {
-
-  mensaje: String,
-
-  usuario: String,
-
-  rol: String,
-
-  leido: {
-    type: Boolean,
-    default: false
-  },
-
-  fecha: {
-    type: Date,
-    default: Date.now
-  }
-
-});
+const Usuario = require("./models/Usuario");
+const Producto = require("./models/Producto");
+const Pedido = require("./models/Pedido");
+const Caja = require("./models/Caja");
+const Notificacion = require("./models/Notificacion");
 
 async function registrarActividad(usuario, accion, detalle){
 
