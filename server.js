@@ -16,6 +16,7 @@ const SECRET = process.env.JWT_SECRET;
 const productosRoutes = require("./routes/productos");
 const pedidosRoutes = require("./routes/pedidos");
 const usuariosRoutes = require("./routes/usuarios");
+const notificacionesRoutes = require("./routes/notificaciones");
 
 const {
   auth,
@@ -36,6 +37,7 @@ app.use(cors());
 app.use("/productos", productosRoutes(io));
 app.use("/pedidos", pedidosRoutes(io));
 app.use("/", usuariosRoutes());
+app.use("/notificaciones", notificacionesRoutes(io));
 
 // DB
 mongoose.connect(process.env.MONGO_URI, {
@@ -266,48 +268,9 @@ app.get("/actividad", auth, async (req,res)=>{
 // ELIMINAR USUARIO
 
 
-app.get("/notificaciones", auth, async (req, res) => {
-  const data = await Notificacion.find({
-    $or: [
-      { rol: req.user.rol },
-      { usuario: req.user.username }
-    ]
-  })
-    .sort({ _id: -1 })
-    .limit(20);
-
-  res.json(data);
-});
-app.put("/notificaciones/leido", auth, async (req, res) => {
-  await Notificacion.updateMany({
-    $or: [
-      { rol: req.user.rol },
-      { usuario: req.user.username }
-    ]
-  }, { leido: true });
-
-  res.json({ ok: true });
-});
-
 // 🗑️ ELIMINAR UNA NOTIFICACIÓN
-app.delete("/notificaciones/:id", auth, async (req, res) => {
-  await Notificacion.findByIdAndDelete(req.params.id);
-  io.emit("actualizar");
-  res.json({ ok: true });
-});
 
 // 🧹 LIMPIAR TODAS LAS NOTIFICACIONES
-app.delete("/notificaciones", auth, async (req, res) => {
-  await Notificacion.deleteMany({
-    $or: [
-      { rol: req.user.rol },
-      { usuario: req.user.username }
-    ]
-  });
-
-  io.emit("actualizar");
-  res.json({ ok: true });
-});
 
 // PEDIDOS
 
