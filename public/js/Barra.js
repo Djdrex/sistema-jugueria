@@ -9,7 +9,11 @@ function verBarra(){
 
 async function cargarPedidos(){
 
-  const res = await fetch("/pedidos");
+  const res = await fetch("/pedidos",{
+  headers:{
+    "Authorization":token
+  }
+});
 
   const data = await res.json();
 
