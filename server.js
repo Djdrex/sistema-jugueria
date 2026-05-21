@@ -36,7 +36,7 @@ app.use(express.json());
 app.use(cors());
 app.use("/productos", productosRoutes(io));
 app.use("/pedidos", pedidosRoutes(io));
-app.use("/", usuariosRoutes());
+app.use("/usuarios", usuariosRoutes());
 app.use("/notificaciones", notificacionesRoutes(io));
 
 // DB
