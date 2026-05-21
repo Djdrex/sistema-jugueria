@@ -56,7 +56,7 @@ let productosCache = [];
 
 async function login(){
   try {
-    const res = await fetch("/login",{
+    const res = await fetch("/usuarios/login",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
