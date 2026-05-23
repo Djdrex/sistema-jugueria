@@ -97,3 +97,9 @@ async function eliminarProducto(id){
 
   cargarProductos();
 }
+
+window.verInventario = verInventario;
+window.crearProducto = crearProducto;
+window.cargarProductos = cargarProductos;
+window.modificarStock = modificarStock;
+window.eliminarProducto = eliminarProducto;
