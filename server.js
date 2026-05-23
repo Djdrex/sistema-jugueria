@@ -38,6 +38,7 @@ app.use("/productos", productosRoutes(io));
 app.use("/pedidos", pedidosRoutes(io));
 app.use("/usuarios", usuariosRoutes());
 app.use("/notificaciones", notificacionesRoutes(io));
+app.use(express.static("public"));
 
 // DB
 mongoose.connect(process.env.MONGO_URI, {
