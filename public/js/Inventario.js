@@ -103,3 +103,5 @@ window.crearProducto = crearProducto;
 window.cargarProductos = cargarProductos;
 window.modificarStock = modificarStock;
 window.eliminarProducto = eliminarProducto;
+
+console.log("inventario cargado");
