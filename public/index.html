@@ -41,16 +41,6 @@
 </div>
 
 <script>
-const socket = io();
-let token="", rol="", username="";
-let pedidoActual=[];
-let productoSeleccionado=null;
-let sonidoActivo = false;
-let audio = new Audio("https://www.soundjay.com/buttons/sounds/button-3.mp3");
-let pedidosPrevios = [];
-let notificaciones = [];
-let productosCache = [];
-
 
 // LOGIN
 
@@ -89,17 +79,6 @@ async function login(){
     alert("❌ Error conectando con el servidor");
   }
 }
-
-// Activar sonido (hack navegador)
-document.body.addEventListener("click", () => {
-  if(!sonidoActivo){
-    audio.play().then(()=>{
-      audio.pause();
-      audio.currentTime = 0;
-      sonidoActivo = true;
-    }).catch(()=>{});
-  }
-}, { once: true });
 
 window.login = login;
 
@@ -1063,9 +1042,14 @@ setInterval(()=>{
 
 </script>
 
+<script src="/js/app.js"></script>
 <script src="/js/barra.js"></script>
-<script src="/js/notificaciones.js"></script>
 <script src="/js/inventario.js"></script>
+<script src="/js/notificaciones.js"></script>
+<script src="/js/pedidos.js"></script>
+<script src="/js/reportes.js"></script>
+<script src="/js/usuarios.js"></script>
+<script src="/js/sockets.js"></script>
 
 </body>
 </html>
