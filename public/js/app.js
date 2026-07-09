@@ -35,5 +35,3 @@ document.body.addEventListener("click", () => {
   }
 
 }, { once:true });
-
-window.login = login;
