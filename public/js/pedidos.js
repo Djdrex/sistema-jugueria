@@ -212,7 +212,9 @@ async function enviarPedido(){
 
 async function cargarPedidosMesero(){
 
-  const res = await fetch("/pedidos");
+  const res = await fetch("/pedidos", {
+    headers:{ "Authorization":token }
+  });
   const data = await res.json();
 
   const cont = document.getElementById("listaCobros");
@@ -367,7 +369,9 @@ function calcularTotalSeleccionado(id){
     return;
   }
 
-  fetch("/pedidos")
+  fetch("/pedidos", {
+    headers:{ "Authorization":token }
+  })
     .then(res => res.json())
     .then(data => {
 
