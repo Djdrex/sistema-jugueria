@@ -17,6 +17,7 @@ const productosRoutes = require("./routes/productos");
 const pedidosRoutes = require("./routes/pedidos");
 const usuariosRoutes = require("./routes/usuarios");
 const notificacionesRoutes = require("./routes/notificaciones");
+const trabajadoresRoutes = require("./routes/trabajadores");
 
 const {
   auth,
@@ -38,6 +39,7 @@ app.use("/productos", productosRoutes(io));
 app.use("/pedidos", pedidosRoutes(io));
 app.use("/usuarios", usuariosRoutes());
 app.use("/notificaciones", notificacionesRoutes(io));
+app.use("/trabajadores", trabajadoresRoutes);
 app.use(express.static("public"));
 
 // DB
