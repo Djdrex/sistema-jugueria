@@ -11,15 +11,13 @@ async function login(){
 
     const data = await res.json();
 
-    console.log("RESPUESTA LOGIN:", data);
-    console.log("ROL recibido:", data.rol);
     if(data.token){
       token=data.token;
       rol=data.rol;
       username=data.username;
 
-      document.getElementById("loginDiv").style.display="none";
-      document.getElementById("app").style.display="block";
+      document.getElementById("loginDiv").hidden=true;
+      document.getElementById("app").hidden=false;
       document.getElementById("info").innerText=username+" ("+rol+")";
 
       cargarTabs();
@@ -35,3 +33,18 @@ async function login(){
 }
 
 window.login = login;
+
+function logout(){
+  token = "";
+  rol = "";
+  username = "";
+  pedidoActual = [];
+  productoSeleccionado = null;
+  document.getElementById("app").hidden = true;
+  document.getElementById("loginDiv").hidden = false;
+  document.getElementById("pass").value = "";
+  document.getElementById("contenido").replaceChildren();
+  document.getElementById("tabs").replaceChildren();
+}
+
+window.logout = logout;

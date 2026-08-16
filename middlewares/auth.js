@@ -4,10 +4,13 @@ const SECRET = process.env.JWT_SECRET;
 
 function auth(req, res, next) {
 
-  const token = req.headers.authorization;
+  const authorization = req.headers.authorization;
+  const token = authorization && authorization.startsWith("Bearer ")
+    ? authorization.slice(7)
+    : authorization;
 
   if (!token) {
-    return res.sendStatus(401);
+    return res.status(401).json({ error: "Autenticación requerida" });
   }
 
   try {
@@ -15,7 +18,7 @@ function auth(req, res, next) {
     req.user = decoded;
     next();
   } catch (err) {
-    return res.sendStatus(403);
+    return res.status(403).json({ error: "Token inválido o expirado" });
   }
 }
 

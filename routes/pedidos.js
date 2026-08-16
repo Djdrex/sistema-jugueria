@@ -16,7 +16,7 @@ const {
 module.exports = (io) => {
 
   // LISTAR PEDIDOS
-  router.get("/", async (req, res) => {
+  router.get("/", auth, async (req, res) => {
 
     res.json(await Pedido.find());
 
@@ -54,8 +54,15 @@ module.exports = (io) => {
 
     let total = 0;
 
+    if (!Array.isArray(req.body.items) || req.body.items.length === 0 || !String(req.body.mesa || "").trim()) {
+      return res.status(400).json({ error: "Mesa e ítems son obligatorios" });
+    }
+
     req.body.items.forEach(i => {
-      total += i.precio;
+      if (!i || typeof i.producto !== "string" || !Number.isFinite(Number(i.precio)) || Number(i.precio) < 0) {
+        throw Object.assign(new Error("Ítem de pedido inválido"), { status: 400 });
+      }
+      total += Number(i.precio);
     });
 
     const conteo = {};

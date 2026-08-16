@@ -45,9 +45,16 @@ module.exports = (io) => {
   // ELIMINAR UNA
   router.delete("/:id", auth, async (req, res) => {
 
-    await Notificacion.findByIdAndDelete(
-      req.params.id
-    );
+    const notificacion = await Notificacion.findById(req.params.id);
+
+    if (!notificacion) return res.sendStatus(404);
+
+    const corresponde = notificacion.rol === req.user.rol || notificacion.usuario === req.user.username;
+    if (!corresponde && req.user.rol !== "admin") {
+      return res.status(403).json({ error: "No puedes eliminar esta notificación" });
+    }
+
+    await notificacion.deleteOne();
 
     io.emit("actualizar");
 

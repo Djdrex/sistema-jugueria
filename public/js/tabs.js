@@ -11,6 +11,7 @@ function cargarTabs(){
   }
 
   if(rol === "admin"){
+    html += "<button onclick='verDashboard()'>Dashboard</button>";
     html += "<button onclick='verInventario()'>Inventario</button>";
     html += "<button onclick='verInformes()'>Informes</button>";
     html += "<button onclick='verUsuarios()'>Usuarios</button>";

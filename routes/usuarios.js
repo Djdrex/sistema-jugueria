@@ -22,6 +22,10 @@ module.exports = () => {
 
     const { username, password } = req.body;
 
+    if (typeof username !== "string" || typeof password !== "string" || !username.trim() || !password) {
+      return res.status(400).json({ error: "Usuario y contraseña son obligatorios" });
+    }
+
     const u = await Usuario.findOne({ username });
 
     if (!u) {
@@ -62,6 +66,10 @@ module.exports = () => {
 
     const { username, password, rol } = req.body;
 
+    if (!username || typeof password !== "string" || password.length < 8 || !["admin", "barra", "mesero"].includes(rol)) {
+      return res.status(400).json({ error: "Datos de usuario inválidos" });
+    }
+
     const existe = await Usuario.findOne({
       username
     });
@@ -93,7 +101,7 @@ module.exports = () => {
   // LISTAR
   router.get("/", auth, soloAdmin, async (req, res) => {
 
-    const usuarios = await Usuario.find();
+    const usuarios = await Usuario.find().select("username rol");
 
     res.json(usuarios);
 
@@ -105,6 +113,8 @@ module.exports = () => {
     const user = await Usuario.findById(
       req.params.id
     );
+
+    if (!user) return res.sendStatus(404);
 
     if (user.username === "admin@titan02") {
 
@@ -132,6 +142,12 @@ module.exports = () => {
       const user = await Usuario.findById(
         req.params.id
       );
+
+      if (!user) return res.sendStatus(404);
+
+      if (!['admin', 'barra', 'mesero'].includes(rol)) {
+        return res.status(400).json({ error: "Rol inválido" });
+      }
 
       if (user.username === "admin@titan02") {
 
@@ -162,6 +178,12 @@ module.exports = () => {
         req.params.id
       );
 
+      if (!user) return res.sendStatus(404);
+
+      if (typeof nueva !== "string" || nueva.length < 8) {
+        return res.status(400).json({ error: "La contraseña debe tener al menos 8 caracteres" });
+      }
+
       const hash = await bcrypt.hash(
         nueva,
         10
@@ -185,6 +207,12 @@ module.exports = () => {
       const user = await Usuario.findById(
         req.user.id
       );
+
+      if (!user) return res.sendStatus(404);
+
+      if (typeof nueva !== "string" || nueva.length < 8) {
+        return res.status(400).json({ error: "La contraseña debe tener al menos 8 caracteres" });
+      }
 
       const valido = await bcrypt.compare(
         actual,

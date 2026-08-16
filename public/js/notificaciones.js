@@ -44,11 +44,11 @@ async function cargarNotificaciones(){
   function toggleNotificaciones(){
   const panel = document.getElementById("panelNoti");
 
-  if(panel.style.display === "none" || panel.style.display === ""){
-    panel.style.display = "block";
+  if(panel.hidden){
+    panel.hidden = false;
     marcarLeido();
   } else {
-    panel.style.display = "none";
+    panel.hidden = true;
   }
 }
 async function marcarLeido(){

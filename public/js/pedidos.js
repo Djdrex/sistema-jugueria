@@ -80,7 +80,7 @@ function agregarProducto(){
   let item = {
   producto: productoSeleccionado.nombre,
   precio: productoSeleccionado.precio,
-  pagado:true
+  pagado:false
 };
 
   if(productoSeleccionado.categoria && productoSeleccionado.categoria.toLowerCase() === "jugo"){
