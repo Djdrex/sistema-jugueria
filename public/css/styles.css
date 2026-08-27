@@ -5,6 +5,9 @@ button, input, select { font: inherit; min-height: 36px; max-width: 100%; margin
 input, select { background: #222; color: inherit; border: 1px solid #666; }
 #tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 12px 0; }
 #contenido { overflow-wrap: anywhere; }
+.tarjeta-trabajador { border: 1px solid #666; background: #1b1b1b; padding: 12px; margin: 12px 0; border-radius: 6px; }
+.tarjeta-trabajador h4, .tarjeta-trabajador p { margin: 6px 0; }
+#controlEstado { font-size: 0.8em; font-weight: normal; }
 #notificaciones { position: fixed; top: 8px; right: 8px; }
 #panelNoti { position: absolute; right: 0; top: 44px; width: min(320px, calc(100vw - 16px)); max-height: calc(100vh - 60px); overflow-y: auto; border: 1px solid #777; background: #222; padding: 8px; }
 @media (max-width: 600px) {

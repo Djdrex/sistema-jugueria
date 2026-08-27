@@ -14,6 +14,8 @@ const {
 } = require("../middlewares/auth");
 
 const SECRET = process.env.JWT_SECRET;
+const Asistencia = require("../models/Asistencia");
+const fechaLocal = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(new Date());
 
 module.exports = () => {
 
@@ -39,6 +41,18 @@ module.exports = () => {
 
     if (!valido) {
       return res.json({ error: true });
+    }
+
+    if (["mesero", "barra"].includes(u.rol)) {
+      const ahora = new Date();
+      u.estadoLaboral = "activo";
+      u.ultimaConexion = ahora;
+      await u.save();
+      await Asistencia.findOneAndUpdate(
+        { trabajador: u._id, fecha: fechaLocal() },
+        { $setOnInsert: { trabajador: u._id, fecha: fechaLocal(), entrada: ahora, estado: "asistio", registradoPor: u.username }, $set: { estadoActual: "activo" }, $push: { eventos: { estado: "activo", fecha: ahora } } },
+        { upsert: true }
+      );
     }
 
     const token = jwt.sign(
@@ -101,7 +115,7 @@ module.exports = () => {
   // LISTAR
   router.get("/", auth, soloAdmin, async (req, res) => {
 
-    const usuarios = await Usuario.find().select("username rol");
+    const usuarios = await Usuario.find().select("username rol activo estadoLaboral ultimaConexion ultimaDesconexion horario");
 
     res.json(usuarios);
 
@@ -224,7 +238,22 @@ module.exports = () => {
         return res.json({
           error:
             "Contraseña actual incorrecta"
-        });
+  });
+
+  router.post("/mi-estado", auth, async (req, res) => {
+    const permitidos = ["activo", "descanso", "servicios_higienicos", "almuerzo", "reunion", "otro", "fin_turno"];
+    if (!["mesero", "barra"].includes(req.user.rol) || !permitidos.includes(req.body.estado)) return res.status(400).json({ error: "Estado inválido" });
+    const ahora = new Date();
+    const finTurno = req.body.estado === "fin_turno";
+    const estado = finTurno ? "desconectado" : req.body.estado;
+    const usuario = await Usuario.findByIdAndUpdate(req.user.id, { estadoLaboral: estado, ...(finTurno ? { ultimaDesconexion: ahora } : {}) }, { new: true });
+    await Asistencia.findOneAndUpdate(
+      { trabajador: usuario._id, fecha: fechaLocal() },
+      { $setOnInsert: { trabajador: usuario._id, fecha: fechaLocal(), entrada: ahora, estado: "asistio", registradoPor: usuario.username }, $set: { estadoActual: estado, ...(finTurno ? { salida: ahora } : {}) }, $push: { eventos: { estado, fecha: ahora } } },
+      { upsert: true }
+    );
+    res.json({ ok: true, estado, fecha: ahora });
+  });
 
       }
 

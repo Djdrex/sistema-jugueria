@@ -6,6 +6,8 @@ const AsistenciaSchema = new mongoose.Schema({
   entrada: Date,
   salida: Date,
   estado: { type: String, enum: ["asistio", "tardanza", "ausencia"], default: "asistio" },
+  estadoActual: { type: String, default: "desconectado" },
+  eventos: [{ estado: String, fecha: Date }],
   minutosTardanza: { type: Number, default: 0, min: 0 },
   pagoDiario: { type: Number, default: 0, min: 0 },
   observaciones: { type: String, default: "" },

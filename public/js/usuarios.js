@@ -20,7 +20,8 @@ async function cargarUsuarios(){
   (data || []).forEach(u => {
     const fila = document.createElement("div");
     const principal = u.username === "admin@titan02";
-    fila.append(`${u.username} (${u.rol})${principal ? " ADMIN PRINCIPAL" : ""} `);
+    const estado = ["mesero", "barra"].includes(u.rol) ? ` · ${u.activo === false ? "cuenta desactivada" : (u.estadoLaboral || "desconectado")}` : "";
+    fila.append(`${u.username} (${u.rol})${estado}${principal ? " ADMIN PRINCIPAL" : ""} `);
     if(!principal){
       const eliminar = document.createElement("button"); eliminar.textContent = "Eliminar"; eliminar.onclick = () => eliminarUsuario(u._id); fila.appendChild(eliminar);
       const selector = document.createElement("select");

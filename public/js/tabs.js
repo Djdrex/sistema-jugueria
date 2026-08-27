@@ -15,6 +15,7 @@ function cargarTabs(){
     html += "<button onclick='verInventario()'>Inventario</button>";
     html += "<button onclick='verInformes()'>Informes</button>";
     html += "<button onclick='verUsuarios()'>Usuarios</button>";
+    html += "<button onclick='verTrabajadores()'>Trabajadores</button>";
     html += "<button onclick='verActividad()'>Actividad</button>";
     html += "<button onclick='resetSistema()'>RESET</button>";
   }
