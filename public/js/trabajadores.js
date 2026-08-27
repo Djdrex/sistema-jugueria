@@ -7,6 +7,38 @@ function verTrabajadores(){
   cargarTrabajadores();
 }
 
+function verMiTurno(){
+  document.getElementById("contenido").innerHTML = `<h3>Mi turno</h3><p>Actualiza tu disponibilidad para que el administrador vea dónde te encuentras.</p><div class="acciones-turno" id="accionesTurno"></div>`;
+  const cont = document.getElementById("accionesTurno");
+  [["activo", "Estoy activo"], ["descanso", "Iniciar descanso"], ["servicios_higienicos", "Servicios higiénicos"], ["almuerzo", "Almuerzo"], ["reunion", "Reunión"], ["otro", "Otra actividad"], ["fin_turno", "Finalizar turno"]].forEach(([estado, texto]) => {
+    const boton = document.createElement("button");
+    boton.textContent = texto;
+    boton.onclick = () => cambiarMiEstado(estado);
+    cont.appendChild(boton);
+  });
+}
+
+function verPersonalActivo(){
+  document.getElementById("contenido").innerHTML = "<h3>Personal activo</h3><p>Actualización automática cada 10 segundos.</p><div id='personalActivo'></div>";
+  cargarPersonalActivo();
+}
+
+async function cargarPersonalActivo(){
+  const res = await fetch("/trabajadores", { headers:{ Authorization:token } });
+  const trabajadores = await res.json();
+  const cont = document.getElementById("personalActivo");
+  if(!cont || !res.ok) return;
+  cont.replaceChildren();
+  const presentes = trabajadores.filter(t => t.estadoLaboral && t.estadoLaboral !== "desconectado" && t.activo);
+  if(!presentes.length) { cont.textContent = "No hay personal activo o en pausa en este momento."; return; }
+  presentes.forEach(t => {
+    const tarjeta = document.createElement("article");
+    tarjeta.className = "tarjeta-trabajador";
+    tarjeta.innerHTML = `<h4>${t.username} · ${t.rol}</h4><p><strong>${textoEstado(t.estadoLaboral)}</strong></p><p>Se conectó: ${fechaHora(t.ultimaConexion)}</p>`;
+    cont.appendChild(tarjeta);
+  });
+}
+
 async function cargarTrabajadores(){
   const res = await fetch("/trabajadores", { headers:{ Authorization:token } });
   const trabajadores = await res.json();
@@ -57,4 +89,4 @@ async function cargarFaltas(){
   cont.textContent = data.faltas.length ? data.faltas.map(f => `${f.fecha}: ${f.username}`).join(" · ") : "No hay faltas en el período seleccionado.";
 }
 
-Object.assign(window, { verTrabajadores, cargarTrabajadores, cargarFaltas, guardarHorario });
+Object.assign(window, { verTrabajadores, cargarTrabajadores, cargarFaltas, guardarHorario, verMiTurno, verPersonalActivo, cargarPersonalActivo });
