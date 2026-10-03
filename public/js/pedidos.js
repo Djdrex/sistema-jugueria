@@ -16,7 +16,7 @@ function verPedidos(){
 
   "<button onclick='enviarPedido()'>Enviar Pedido</button>" +
 
-  "<hr><h3>Pedidos y cobros</h3><div class='filter-row'><label>Estado<select id='filtroEstadoPedido' onchange='cargarPedidosMesero()'><option value=''>Operativos</option><option value='en_espera'>En espera</option><option value='preparando'>Preparando</option><option value='listo'>Listos</option><option value='entregado'>Entregados</option><option value='cancelado'>Cancelados</option></select></label><label>Desde<input id='filtroPedidoDesde' type='date' onchange='cargarPedidosMesero()'></label><label>Hasta<input id='filtroPedidoHasta' type='date' onchange='cargarPedidosMesero()'></label><label>Método de pago<select id='filtroPedidoMetodo' onchange='cargarPedidosMesero()'><option value=''>Todos</option><option value='efectivo'>Efectivo</option><option value='yape'>Yape</option></select></label></div>" +
+  "<hr><h3>Pedidos y cobros</h3><div class='filter-row'><label>Estado<select id='filtroEstadoPedido' onchange='cargarPedidosMesero()'><option value=''>Operativos</option><option value='en_espera'>En espera</option><option value='preparando'>Preparando</option><option value='listo'>Listos</option><option value='entregado'>Entregados</option>" + (rol === "admin" ? "<option value='cancelado'>Historial cancelado</option>" : "") + "</select></label><label>Desde<input id='filtroPedidoDesde' type='date' onchange='cargarPedidosMesero()'></label><label>Hasta<input id='filtroPedidoHasta' type='date' onchange='cargarPedidosMesero()'></label><label>Método de pago<select id='filtroPedidoMetodo' onchange='cargarPedidosMesero()'><option value=''>Todos</option><option value='efectivo'>Efectivo</option><option value='yape'>Yape</option></select></label></div>" +
   "<div id='listaCobros'></div>";
 
   cargarPedidosMesero();
@@ -37,7 +37,7 @@ async function buscarProducto(){
 
   cont.innerHTML = "";
 
-  productosCache.forEach(p=>{
+  productosCache.filter(p=>p.tipo !== "insumo" && p.activo !== false).forEach(p=>{
   if(p.nombre && p.nombre.toLowerCase().includes(texto)){
 
     const btn = document.createElement("button");
@@ -88,7 +88,7 @@ function agregarProducto(){
   if(productoSeleccionado.categoria && productoSeleccionado.categoria.toLowerCase() === "jugo"){
     item.azucar = document.getElementById("azucar").checked;
     item.helado = document.getElementById("helado").checked;
-    item.nota = document.getElementById("nota").value;
+    item.nota = document.getElementById("nota").value.trim();
   }
 
   pedidoActual.push(item);
@@ -238,7 +238,6 @@ async function cargarPedidosMesero(){
 
   data.forEach(p => {
 
-    // 🔥 SOLO PEDIDOS ENTREGADOS Y NO PAGADOS
     const estadoFiltro = document.getElementById("filtroEstadoPedido")?.value;
     if(estadoFiltro && p.estado !== estadoFiltro) return;
     if(!estadoFiltro && (p.estado === "entregado" && p.pagado)) return;
@@ -249,15 +248,16 @@ async function cargarPedidosMesero(){
     div.style.padding = "10px";
 
     let html = "<b>Mesa " + escapeHtml(p.mesa) + "</b><br>Estado: " + escapeHtml(p.estado) + "<br>";
-    html += "Total: S/" + Number(p.total).toFixed(2) + "<br><br>";
+    html += "Total: S/" + Number(p.total).toFixed(2) + "<br>";
+    html += "Pagado: S/" + Number(p.totalPagado || 0).toFixed(2) + " · Saldo: S/" + (Number(p.total)-Number(p.totalPagado||0)).toFixed(2) + "<br><br>";
 
     p.items.forEach(i => {
-      html += "- " + escapeHtml(i.producto) + "<br>";
+      html += `- ${escapeHtml(i.producto)}${i.nota ? ` <strong>· Nota: ${escapeHtml(i.nota)}</strong>` : ""}${i.azucar ? " · Sin azúcar" : ""}${i.helado ? " · Helado" : ""}<br>`;
     });
 
     div.innerHTML = html;
 
-    if(p.estado === "entregado" && !p.pagado){ const btn = document.createElement("button"); btn.innerText = "Cobrar"; btn.onclick = () => cobrarPedido(p._id, p); div.appendChild(btn); }
+    if(p.estado === "entregado" && !p.pagado){ const btn = document.createElement("button"); btn.innerText = "Cobrar / registrar abono"; btn.onclick = () => cobrarPedido(p._id, p); div.appendChild(btn); }
 
     cont.appendChild(div);
   });
@@ -265,21 +265,15 @@ async function cargarPedidosMesero(){
 }
 
 async function cobrarPedido(id, pedido){ 
+  window.pedidoCobroActual = pedido;
 
-  let html = `
-    <h3>💰 Cobrar Pedido</h3>
-    <b>Mesa ${escapeHtml(pedido.mesa)}</b><br><br>
-
-    <button onclick="seleccionarTodo()">✅ Seleccionar todo</button>
-    <button onclick="deseleccionarTodo()">❌ Limpiar</button>
-
-    <h4>Selecciona productos</h4>
-  `;
+  let html = `<div class="module-header"><div><p class="eyebrow">Cobro</p><h2>Mesa ${escapeHtml(pedido.mesa)}</h2><p>Registra el pago de productos seleccionados o un abono parcial.</p></div><button type="button" onclick="verPedidos()">Volver a pedidos</button></div>`;
 
   let pagado = pedido.totalPagado || 0;
 
   html += `<p>💰 Ya pagado: S/ ${Number(pagado).toFixed(2)}</p>`;
   html += `<p>🧾 Restante: S/ ${(Number(pedido.total) - Number(pagado)).toFixed(2)}</p><br>`;
+  html += `<section class="panel"><h3>Abono por importe</h3><div class="filter-row"><label>Monto a registrar (S/) <input id="montoAbono" type="number" min="0.01" max="${(Number(pedido.total)-Number(pagado)).toFixed(2)}" step="0.01"></label><button type="button" onclick="prepararAbono('${id}')">Continuar con abono</button></div><div id="abonoConfirmacion"></div></section>`;
   html += "<h4>💰 Pagos realizados</h4>";
 
 if(pedido.pagos && pedido.pagos.length > 0){
@@ -315,28 +309,22 @@ if(pedido.pagos && pedido.pagos.length > 0){
 
 }
 
+  html += "<h3>O cobrar por productos seleccionados</h3><button onclick='seleccionarTodo()'>Seleccionar todo</button><button onclick='deseleccionarTodo()'>Limpiar</button><br>";
   pedido.items.forEach((item, index) => {
 
   // 🔥 SI YA ESTÁ PAGADO
   if(item.pagado){
 
     html += `
-      <div style="opacity:0.5;color:lightgreen">
+      <div style="opacity:0.6;color:var(--accent)">
         ✅ ${escapeHtml(item.producto)} - PAGADO
       </div>
     `;
 
     return;
   }
-      html += `
-    <input 
-      type="checkbox" 
-      class="itemCheck" 
-      data-index="${index}"
-      data-precio="${Number(item.precio).toFixed(2)}"
-    >
-    ${escapeHtml(item.producto)} - S/${Number(item.precio).toFixed(2)}
-    <br>
+    html += `
+    <label class="payment-item"><input type="checkbox" class="itemCheck" data-index="${index}" data-precio="${Number(item.precio).toFixed(2)}"><span>${escapeHtml(item.producto)}${item.nota ? ` · Nota: ${escapeHtml(item.nota)}` : ""} - S/${Number(item.precio).toFixed(2)}</span></label>
   `;
     });
 
@@ -354,6 +342,19 @@ if(pedido.pagos && pedido.pagos.length > 0){
 function seleccionarTodo(){
   document.querySelectorAll(".itemCheck").forEach(c => c.checked = true);
 }
+
+function prepararAbono(id){
+  const pedidoId = id, monto = Number(document.getElementById("montoAbono")?.value), box = document.getElementById("abonoConfirmacion");
+  const pedido = window.pedidoCobroActual;
+  if(!pedido || String(pedido._id) !== String(pedidoId) || !Number.isFinite(monto) || monto <= 0 || monto > Number(pedido.total)-Number(pedido.totalPagado||0)) return alert("Ingresa un abono válido que no supere el saldo pendiente.");
+  box.innerHTML = `<p>Registrar abono de S/ ${monto.toFixed(2)}. Selecciona método:</p><button type="button" onclick="confirmarAbonoMetodo('${pedidoId}',${monto},'yape')">Yape (ya verificado)</button><button type="button" onclick="confirmarAbonoMetodo('${pedidoId}',${monto},'efectivo')">Efectivo</button>`;
+}
+function confirmarAbonoMetodo(id,monto,metodo){
+  const box=document.getElementById("abonoConfirmacion");
+  if(metodo === "yape") return box.innerHTML=`<p>Confirma solo después de comprobar el abono en la cuenta.</p><button id="btnConfirmarPago" type="button" onclick="confirmarPago('${id}',${monto},'yape',null,undefined)">Confirmar pago</button>`;
+  box.innerHTML=`<label>Recibido (S/)<input id="abonoRecibido" type="number" min="${monto}" step="0.01"></label><button type="button" onclick="confirmarAbonoEfectivo('${id}',${monto})">Calcular vuelto</button><div id="abonoVuelto"></div>`;
+}
+function confirmarAbonoEfectivo(id,monto){const recibido=Number(document.getElementById("abonoRecibido").value);if(!Number.isFinite(recibido)||recibido<monto)return alert("El monto recibido no cubre el abono.");document.getElementById("abonoVuelto").innerHTML=`Vuelto: S/ ${(recibido-monto).toFixed(2)} <button id="btnConfirmarPago" type="button" onclick="confirmarPago('${id}',${monto},'efectivo',${recibido},undefined)">Confirmar pago</button>`;}
 
 function deseleccionarTodo(){
   document.querySelectorAll(".itemCheck").forEach(c => c.checked = false);
@@ -497,39 +498,28 @@ Confirmar pago
 
 async function confirmarPago(id, monto, metodo, recibido, indices){
   paymentAttemptKey ||= crypto.randomUUID();
-  
   const btn = document.getElementById("btnConfirmarPago");
-
-if(btn){
-  btn.disabled = true;
-  btn.innerText = "Procesando...";
-}
-
+  if(btn){ btn.disabled = true; btn.innerText = "Procesando..."; }
   let res, data;
   try {
-    res = await fetch("/pedidos/" + id + "/pagar",{
-      method:"POST",
-      headers:{ "Content-Type":"application/json", "Authorization":token, "Idempotency-Key":paymentAttemptKey },
-      body:JSON.stringify({ monto:Number(monto), metodo, recibido, indices })
-    });
+    const body = { monto:Number(monto), metodo, recibido };
+    if(Array.isArray(indices)) body.indices = indices;
+    res = await fetch(`/pedidos/${id}/pagar`, { method:"POST", headers:{ "Content-Type":"application/json", Authorization:token, "Idempotency-Key":paymentAttemptKey }, body:JSON.stringify(body) });
     data = await res.json();
-  } catch(err) {
+  } catch {
     if(btn){ btn.disabled = false; btn.innerText = "Reintentar"; }
     alert("No se pudo confirmar la respuesta del servidor. Reintenta para verificar el mismo pago.");
     return;
   }
-  paymentAttemptKey = null;
-
-  if(data.error){
-    if(btn){
-  btn.disabled = false;
-  btn.innerText = "Confirmar";
-}
-    alert("❌ " + data.error);
-  } else {
-    alert("✅ Pago registrado");
+  if(!res.ok || data.error){
+    paymentAttemptKey = null;
+    if(btn){ btn.disabled = false; btn.innerText = "Confirmar"; }
+    alert(data.error || "No se pudo registrar el pago.");
+    return;
   }
-
+  paymentAttemptKey = null;
+  window.pedidoCobroActual = data;
+  alert("Pago registrado.");
   verPedidos();
 }
 

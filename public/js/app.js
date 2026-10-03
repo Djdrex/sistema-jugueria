@@ -18,6 +18,7 @@ let audio = new Audio(
 let pedidosPrevios = [];
 let notificaciones = [];
 let productosCache = [];
+let refrescoActivo = false;
 
 function inicializarTema(){
   const guardado = localStorage.getItem("jugueria-theme");

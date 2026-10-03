@@ -7,6 +7,7 @@ const seccionesNav = [
     { texto:"Pedidos", icono:"▤", click:"verPedidos()", roles:["admin","mesero"] },
     { texto:"Barra", icono:"◷", click:"verBarra()", roles:["admin","barra"] },
     { texto:"Menú e inventario", icono:"◫", click:"verInventario()", roles:["admin"] },
+    { texto:"Insumos y recetas", icono:"◩", click:"verInsumos()", roles:["admin"] },
     { texto:"Categorías", icono:"▧", click:"verCategorias()", roles:["admin"] },
     { texto:"Gastos y caja", icono:"▣", click:"verGastos()", roles:["admin"] }
   ]},

@@ -9,20 +9,24 @@ const { auth, soloAdmin } = require("../middlewares/auth");
 module.exports = io => {
   const router = express.Router();
   router.post("/", auth, soloAdmin, async (req, res) => {
-    const { nombre, categoria, precio, stock, stockMinimo, costo, unidad } = req.body;
+    const { nombre, categoria, precio = 0, stock, stockMinimo, costo, unidad, tipo = "producto", receta = [] } = req.body;
     if (typeof nombre !== "string" || !nombre.trim() || nombre.trim().length > 160 || typeof categoria !== "string" || categoria.trim().length > 80 || !Number.isFinite(precio) || precio < 0 || Math.round(precio * 100) !== precio * 100 || !Number.isInteger(stock) || stock < 0) {
       return res.status(400).json({ error: "Nombre, categoría, precio y stock inválidos" });
     }
     if (stockMinimo !== undefined && (!Number.isInteger(stockMinimo) || stockMinimo < 0) || costo !== undefined && (!Number.isFinite(costo) || costo < 0 || Math.round(costo * 100) !== costo * 100) || unidad !== undefined && (typeof unidad !== "string" || !unidad.trim() || unidad.length > 30)) return res.status(400).json({ error: "Costo, unidad o stock mínimo inválido" });
-    const producto = await Producto.create({ nombre: nombre.trim(), categoria: categoria.trim(), precio, stock, stockMinimo, costo, unidad: unidad?.trim() });
+    if (!["producto", "insumo"].includes(tipo) || !Array.isArray(receta) || receta.length > 100) return res.status(400).json({ error:"Tipo o receta inválidos" });
+    if (tipo === "insumo" && precio !== 0) return res.status(400).json({ error:"Un insumo se crea con precio de venta cero" });
+    const producto = await Producto.create({ nombre: nombre.trim(), categoria: categoria.trim(), precio, stock, stockMinimo, costo, unidad: unidad?.trim(), tipo, receta:tipo === "producto" ? receta : [] });
     io.emit("actualizar");
     return res.status(201).json(producto);
   });
 
   router.get("/", auth, async (req, res) => {
-    const { categoria, disponibilidad, buscar } = req.query;
+    const { categoria, disponibilidad, buscar, tipo } = req.query;
     const filtro = {};
     if (categoria) filtro.categoria = categoria;
+    if (tipo && !["producto", "insumo"].includes(tipo)) return res.status(400).json({ error:"Tipo inválido" });
+    if (tipo) filtro.tipo = tipo;
     if (disponibilidad === "agotado") filtro.stock = 0;
     else if (disponibilidad === "bajo") filtro.$expr = { $and: [{ $gt: ["$stock", 0] }, { $lte: ["$stock", { $ifNull: ["$stockMinimo", 5] }] }] };
     else if (disponibilidad === "disponible") filtro.stock = { $gt: 0 };
@@ -42,6 +46,7 @@ module.exports = io => {
     if (values.unidad) values.unidad = values.unidad.trim();
     const producto = await Producto.findByIdAndUpdate(req.params.id, { $set: values }, { new: true, runValidators: true });
     if (!producto) return res.sendStatus(404);
+    await Actividad.create({ usuario:req.user.username, accion:"PRODUCTO_ACTUALIZADO", detalle:`Actualizó ${producto.nombre}: ${Object.keys(values).join(", ")}` });
     io.emit("actualizar");
     return res.json(producto);
   });
@@ -54,12 +59,45 @@ module.exports = io => {
     return res.json([...all.values()].sort((a, b) => a.nombre.localeCompare(b.nombre)));
   });
 
+  router.get("/insumos", auth, async (_req, res) => res.json(await Producto.find({ tipo:"insumo" }).select("nombre categoria stock stockMinimo costo unidad activo").sort({ nombre:1 }).limit(1000)));
+
+  router.get("/insumos/resumen", auth, soloAdmin, async (_req, res) => {
+    const rows = await Producto.find({ tipo:"insumo" }).select("nombre categoria stock stockMinimo costo unidad activo").sort({ stock:1, nombre:1 }).limit(1000);
+    const activos = rows.filter(item => item.activo !== false);
+    return res.json({ insumos:rows, resumen:{ total:rows.length, agotados:activos.filter(i => i.stock <= 0).length, bajoStock:activos.filter(i => i.stock > 0 && i.stock <= (i.stockMinimo ?? 5)).length, valorizacion:activos.every(i => Number.isFinite(i.costo)) ? activos.reduce((sum,i)=>sum+i.stock*i.costo,0) : null } });
+  });
+
+  router.get("/:id/receta", auth, soloAdmin, async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error:"Identificador inválido" });
+    const producto = await Producto.findById(req.params.id).populate("receta.insumo", "nombre unidad stock stockMinimo");
+    if (!producto) return res.sendStatus(404);
+    return res.json({ receta:producto.receta, insumos:await Producto.find({ tipo:"insumo", activo:{ $ne:false } }).select("nombre unidad stock stockMinimo").sort({ nombre:1 }) });
+  });
+
+  router.put("/:id/receta", auth, soloAdmin, async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.id) || !Array.isArray(req.body.receta) || req.body.receta.length > 100) return res.status(400).json({ error:"Receta inválida" });
+    const ids = new Set();
+    for (const row of req.body.receta) {
+      if (!row || !mongoose.isValidObjectId(row.insumo) || !Number.isFinite(row.cantidad) || row.cantidad <= 0 || ids.has(String(row.insumo))) return res.status(400).json({ error:"Cada insumo debe ser válido y no repetirse" });
+      ids.add(String(row.insumo));
+    }
+    if (ids.has(String(req.params.id))) return res.status(400).json({ error:"Un producto no puede consumirse a sí mismo como insumo" });
+    const insumos = await Producto.countDocuments({ _id:{ $in:[...ids] }, tipo:"insumo" });
+    if (insumos !== ids.size) return res.status(400).json({ error:"La receta solo puede referir productos tipo insumo" });
+    const producto = await Producto.findOneAndUpdate({ _id:req.params.id, tipo:"producto" }, { $set:{ receta:req.body.receta } }, { new:true });
+    if (!producto) return res.status(404).json({ error:"No se encontró producto vendible" });
+    io.emit("actualizar");
+    return res.json(producto);
+  });
+
   router.post("/categorias", auth, soloAdmin, async (req, res) => {
     const nombre = typeof req.body.nombre === "string" ? req.body.nombre.trim() : "";
     if (!nombre || nombre.length > 80) return res.status(400).json({ error: "Nombre de categoría inválido" });
     const existentes = await Producto.distinct("categoria");
     if (existentes.some(value => value.toLocaleLowerCase() === nombre.toLocaleLowerCase()) || await Categoria.exists({ nombre: new RegExp(`^${nombre.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") })) return res.status(409).json({ error: "La categoría ya existe" });
-    return res.status(201).json(await Categoria.create({ nombre, descripcion: typeof req.body.descripcion === "string" ? req.body.descripcion.trim().slice(0, 300) : "" }));
+    const category = await Categoria.create({ nombre, descripcion: typeof req.body.descripcion === "string" ? req.body.descripcion.trim().slice(0, 300) : "" });
+    io.emit("actualizar");
+    return res.status(201).json(category);
   });
 
   router.put("/categorias/:id", auth, soloAdmin, async (req, res) => {
@@ -80,6 +118,7 @@ module.exports = io => {
     try {
       const category = await Categoria.findByIdAndUpdate(req.params.id, { $set: values }, { new: true, runValidators: true });
       if (!category) return res.sendStatus(404);
+      io.emit("actualizar");
       return res.json(category);
     } catch (error) { if (error.code === 11000) return res.status(409).json({ error: "La categoría ya existe" }); throw error; }
   });

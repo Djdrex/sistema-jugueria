@@ -24,6 +24,9 @@ async function login(){
 
       cargarTabs();
       cargarNotificaciones();
+      const inicio = rol === "admin" ? "verDashboard()" : rol === "barra" ? "verBarra()" : "verPedidos()";
+      new Function(inicio)();
+      const primerBoton = document.querySelector(".nav-item"); if(primerBoton){ primerBoton.setAttribute("aria-current", "page"); }
       if(rol === "mesero" || rol === "barra") mostrarControlEstado();
     } else {
       alert("❌ Usuario o contraseña incorrectos");

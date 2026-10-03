@@ -5,6 +5,7 @@ const Pedido = require("../models/Pedido");
 const Producto = require("../models/Producto");
 const Notificacion = require("../models/Notificacion");
 const Actividad = require("../models/Actividad");
+const MovimientoInventario = require("../models/MovimientoInventario");
 const { toCents, sumCents } = require("../services/money");
 const { auth, soloAdmin, soloBarra, soloMesero } = require("../middlewares/auth");
 
@@ -16,19 +17,20 @@ module.exports = io => {
     const { estado, desde, hasta, metodo } = req.query;
     const filtro = {};
     if (estado && ![...ESTADOS, "cancelado"].includes(estado)) return res.status(400).json({ error: "Estado de pedido inválido" });
+    if (estado === "cancelado" && req.user.rol !== "admin") return res.status(403).json({ error:"Solo administración puede consultar pedidos cancelados" });
     if (estado) filtro.estado = estado;
     else if (req.user.rol === "mesero") filtro.estado = { $in: ["entregado"] };
     if (Boolean(desde) !== Boolean(hasta)) return res.status(400).json({ error: "Indica ambas fechas del período" });
     if (desde && hasta) {
-      const validaFecha = value => /^\\d{4}-\\d{2}-\\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T12:00:00Z`)) && new Date(`${value}T12:00:00Z`).toISOString().slice(0, 10) === value;
+      const validaFecha = value => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T12:00:00Z`)) && new Date(`${value}T12:00:00Z`).toISOString().slice(0, 10) === value;
       if (!validaFecha(desde) || !validaFecha(hasta) || desde > hasta) return res.status(400).json({ error: "Rango de fechas inválido" });
       const inicio = new Date(`${desde}T00:00:00-05:00`), fin = new Date(`${hasta}T00:00:00-05:00`);
       fin.setTime(fin.getTime() + 86400000);
       filtro.fecha = { $gte: inicio, $lt: fin };
     }
     if (metodo && !["efectivo", "yape"].includes(metodo)) return res.status(400).json({ error: "Método de pago inválido" });
-    if (metodo) filtro["pagos.metodo"] = metodo;
-    if (!estado) filtro.estado = { $ne: "cancelado" };
+    if (metodo) filtro.pagos = { $elemMatch:{ metodo } };
+    if (!estado) filtro.estado = { ...(filtro.estado || {}), $nin: ["cancelado"] };
     const pedidos = await Pedido.find(filtro).sort({ fecha: -1 }).limit(500);
     return res.json(pedidos);
   });
@@ -45,7 +47,7 @@ module.exports = io => {
     }
     pedido.estado = req.body.estado;
     await pedido.save();
-    io.to(`role:${req.user.rol}`).emit("actualizar");
+    io.emit("actualizar");
     return res.json({ ok: true, pedido });
   });
 
@@ -64,7 +66,7 @@ module.exports = io => {
     if (!pedido) return res.sendStatus(404);
     const pagoPrevio = pedido.pagos.find(p => p.requestId === key);
     if (pagoPrevio) return res.json(pedido);
-    if (pedido.estado !== "entregado" || pedido.pagado) return res.status(409).json({ error: "El pedido no está disponible para cobrar" });
+    if (pedido.estado !== "entregado" || pedido.estado === "cancelado" || pedido.pagado) return res.status(409).json({ error: "El pedido no está disponible para cobrar" });
     const totalCents = cents(pedido.total);
     const paidCents = cents(pedido.totalPagado || 0);
     const amountCents = cents(monto);
@@ -74,7 +76,7 @@ module.exports = io => {
       if (!Array.isArray(indices) || indices.length === 0 || new Set(indices).size !== indices.length || indices.some(i => !Number.isInteger(i) || i < 0 || i >= pedido.items.length || pedido.items[i].pagado)) return res.status(400).json({ error: "Selección de productos inválida" });
       const selectedCents = sumCents(indices.map(i => pedido.items[i].precio));
       if (selectedCents === null) return res.status(409).json({ error: "Los precios del pedido requieren revisión administrativa" });
-      if (selectedCents !== amountCents) return res.status(400).json({ error: "El importe no coincide con los productos seleccionados" });
+      if (selectedCents !== amountCents) return res.status(400).json({ error: "El importe debe coincidir con los productos seleccionados" });
     }
     const nextCents = paidCents + amountCents;
     const set = { totalPagado: nextCents / 100, pagado: nextCents === totalCents };
@@ -111,6 +113,7 @@ module.exports = io => {
     if (existente) return res.json(existente);
 
     const cantidades = new Map();
+    const cantidadesInsumos = new Map();
     const keyPorItem = new Map();
     for (const item of items) {
       if (!item || typeof item.producto !== "string" || !item.producto.trim() || item.producto.length > 160 || item.productoId !== undefined && !mongoose.isValidObjectId(item.productoId) || typeof item.nota === "string" && item.nota.length > 300) {
@@ -124,9 +127,19 @@ module.exports = io => {
     const productos = new Map();
     for (const key of cantidades.keys()) {
       const p = key.startsWith("name:") ? await Producto.findOne({ nombre: key.slice(5) }) : await Producto.findById(key);
-      if (!p || !Number.isFinite(p.precio) || p.precio < 0) return res.status(400).json({ error: `Producto no disponible: ${key.startsWith("name:") ? key.slice(5) : key}` });
+      if (!p || p.tipo === "insumo" || p.activo === false || !Number.isFinite(p.precio) || p.precio < 0) return res.status(400).json({ error: `Producto no disponible: ${key.startsWith("name:") ? key.slice(5) : key}` });
       if (!Number.isInteger(p.stock) || p.stock < cantidades.get(key)) return res.status(409).json({ error: `Stock insuficiente de ${p.nombre}` });
       productos.set(key, p);
+      for (const receta of p.receta || []) {
+        const insumoId = String(receta.insumo);
+        cantidadesInsumos.set(insumoId, (cantidadesInsumos.get(insumoId) || 0) + Number(receta.cantidad || 0));
+      }
+    }
+    const insumos = new Map();
+    for (const [id, cantidad] of cantidadesInsumos) {
+      const insumo = await Producto.findOne({ _id:id, tipo:"insumo", activo:{ $ne:false } });
+      if (!insumo || !Number.isFinite(insumo.stock) || insumo.stock < cantidad) return res.status(409).json({ error:`Stock insuficiente del insumo ${insumo?.nombre || id}` });
+      insumos.set(id, { producto:insumo, cantidad });
     }
 
     const session = await mongoose.startSession();
@@ -143,6 +156,10 @@ module.exports = io => {
           const reservado = await Producto.findOneAndUpdate({ _id: p._id, stock: { $gte: cantidad } }, { $inc: { stock: -cantidad } }, { new: true, session });
           if (!reservado) throw Object.assign(new Error(`Stock insuficiente de ${p.nombre}`), { status: 409 });
         }
+        for (const [id, { producto:p, cantidad }] of insumos) {
+          const reservado = await Producto.findOneAndUpdate({ _id:id, stock:{ $gte:cantidad } }, { $inc:{ stock:-cantidad } }, { new:true, session });
+          if (!reservado) throw Object.assign(new Error(`Stock insuficiente del insumo ${p.nombre}`), { status:409 });
+        }
         const safeItems = items.map(item => {
           const p = productos.get(keyPorItem.get(item));
           return { producto: p.nombre, precio: p.precio, pagado: false, azucar: item.azucar === true, helado: item.helado === true, nota: typeof item.nota === "string" ? item.nota.trim() : "" };
@@ -151,6 +168,11 @@ module.exports = io => {
         if (totalCents === null) throw Object.assign(new Error("Los precios del pedido requieren revisión administrativa"), { status: 409 });
         const total = totalCents / 100;
         [pedidoCreado] = await Pedido.create([{ mesa, items: safeItems, creadoPor: req.user.username, requestId, total, totalPagado: 0, estado: "en_espera" }], { session });
+        const movimientos = [
+          ...[...cantidades].map(([key, cantidad]) => { const p = productos.get(key); return { producto:p._id, nombreProducto:p.nombre, cambio:-cantidad, saldo:p.stock-cantidad, tipo:"salida", motivo:`Reserva del pedido ${String(pedidoCreado._id)}`, usuario:req.user.username }; }),
+          ...[...insumos].map(([, { producto:p, cantidad }]) => ({ producto:p._id, nombreProducto:p.nombre, cambio:-cantidad, saldo:p.stock-cantidad, tipo:"salida", motivo:`Consumo por pedido ${String(pedidoCreado._id)}`, usuario:req.user.username }))
+        ];
+        if(movimientos.length) await MovimientoInventario.create(movimientos, { session });
         await Notificacion.create([{ mensaje: `Nuevo pedido en mesa ${mesa}`, usuario: req.user.username, rol: "barra" }], { session });
       });
     } catch (err) {

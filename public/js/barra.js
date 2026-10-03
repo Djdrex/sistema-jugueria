@@ -1,15 +1,16 @@
 function verBarra(){
 
   document.getElementById("contenido").innerHTML = 
-  "<div class='module-header'><div><p class='eyebrow'>Operaciones</p><h2>Barra</h2><p>Cola de preparación de pedidos.</p></div><label>Historial cancelado <input id='mostrarCanceladosBarra' type='checkbox' onchange='cargarPedidos()'></label></div>" +
+  "<div class='module-header'><div><p class='eyebrow'>Operaciones</p><h2>Barra</h2><p>Cola de preparación de pedidos.</p></div><label>Mostrar cancelados <input id='mostrarCanceladosBarra' type='checkbox' onchange='cargarPedidos()'></label></div>" +
   "<div id='lista' class='panel' style='height:min(65vh,700px); overflow-y:auto;'></div>";
 
   cargarPedidos();
 }
 
 async function cargarPedidos(){
-
-  const res = await fetch("/pedidos",{
+  const params = new URLSearchParams();
+  if(document.getElementById("mostrarCanceladosBarra")?.checked && rol === "admin") params.set("estado", "cancelado");
+  const res = await fetch(`/pedidos?${params}`,{
   headers:{
     "Authorization":token
   }
@@ -34,8 +35,7 @@ async function cargarPedidos(){
 
   data.forEach(p => {
 
-    const mostrarCancelados = document.getElementById("mostrarCanceladosBarra")?.checked;
-    if(p.estado === "cancelado" && !mostrarCancelados || p.estado === "entregado" && p.estado !== "cancelado") return;
+    if(p.estado !== "cancelado" && p.estado === "entregado") return;
 
     let color = "var(--surface-soft)";
 
@@ -72,49 +72,26 @@ async function cargarPedidos(){
         : fecha.toLocaleString())
       + "<br><br>";
 
-    const agrupados = {};
-
-    p.items.forEach(i => {
-
-      let extras = [];
-
-      if(i.azucar){
-        extras.push("Sin azúcar");
-      }
-
-      if(i.helado){
-        extras.push("Helado");
-      }
-
-      if(i.nota && i.nota.trim() !== ""){
-        extras.push(i.nota.trim());
-      }
-
-      let nombreFinal = i.producto;
-
-      if(extras.length > 0){
-        nombreFinal +=
-          " (" + extras.join(", ") + ")";
-      }
-
-      if(!agrupados[nombreFinal]){
-        agrupados[nombreFinal] = 0;
-      }
-
-      agrupados[nombreFinal]++;
-
+    const lista = document.createElement("div");
+    lista.innerHTML = html;
+    p.items.forEach(item => {
+      const linea = document.createElement("article");
+      linea.className = "bar-item";
+      const nombre = document.createElement("strong");
+      nombre.textContent = item.producto;
+      linea.appendChild(nombre);
+      const extras = [];
+      if(item.azucar) extras.push("SIN AZÚCAR");
+      if(item.helado) extras.push("Helado");
+      if(extras.length){ const tag=document.createElement("span");tag.className="bar-item-tag";tag.textContent=extras.join(" · ");linea.appendChild(tag); }
+      if(item.nota?.trim()){ const nota=document.createElement("p");nota.className="bar-item-note";nota.textContent=`NOTA: ${item.nota.trim()}`;linea.appendChild(nota); }
+      lista.appendChild(linea);
     });
+    div.replaceChildren(lista);
 
-    Object.entries(agrupados)
-      .forEach(([nombre, cantidad]) => {
-
-        html +=
-          cantidad + "x " + escapeHtml(nombre) + "<br>";
-
-      });
-
-    div.innerHTML = html;
-
+    if(p.estado === "cancelado"){
+      const cancelado=document.createElement("strong");cancelado.className="cancelled-label";cancelado.textContent="Pedido cancelado · solo historial";div.appendChild(cancelado);cont.appendChild(div);return;
+    }
     const btn1 = document.createElement("button");
 
     btn1.innerText = "Preparando";

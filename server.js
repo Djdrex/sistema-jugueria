@@ -223,7 +223,7 @@ app.get("/dashboard", auth, soloAdmin, async (req, res) => {
     Pedido.find({ fecha: { $gte: inicioMes, $lt: inicioDiaSiguiente }, estado: { $ne: "cancelado" } }).select("total totalPagado pagado estado"),
     Pedido.aggregate([{ $match: { fecha: { $gte: hoy, $lt: inicioDiaSiguiente } } }, { $group: { _id: "$estado", cantidad: { $sum: 1 } } }]),
     Gasto.aggregate([{ $match: { fecha: { $gte: inicioMes, $lt: inicioDiaSiguiente } } }, { $group: { _id: null, total: { $sum: "$monto" } } }]),
-    Producto.find().select("nombre stock").sort({ stock: 1 }).limit(100)
+    Producto.find().select("nombre stock stockMinimo tipo activo").sort({ stock: 1 }).limit(1000)
   ]);
   const agregados = pedidos => ({
     ventas: Math.round(pedidos.reduce((sum, pedido) => sum + (Number(pedido.totalPagado) || (pedido.pagado ? Number(pedido.total) || 0 : 0)), 0) * 100) / 100,
@@ -236,8 +236,8 @@ app.get("/dashboard", auth, soloAdmin, async (req, res) => {
     dia: agregados(pedidosDia), semana: agregados(pedidosSemana), mes: agregados(pedidosMes),
     estados: Object.fromEntries(estados.map(item => [item._id || "sin_estado", item.cantidad])),
     gastosMes: Math.round((gastosMes[0]?.total || 0) * 100) / 100,
-    bajoStock: stock.filter(p => Number.isFinite(p.stock) && p.stock <= 5 && p.stock > 0).map(p => ({ nombre: p.nombre, stock: p.stock })),
-    agotados: stock.filter(p => p.stock === 0).map(p => ({ nombre: p.nombre, stock: p.stock })),
+    bajoStock: stock.filter(p => p.activo !== false && Number.isFinite(p.stock) && p.stock <= (p.stockMinimo ?? 5) && p.stock > 0).map(p => ({ nombre: p.nombre, stock: p.stock, minimo:p.stockMinimo ?? 5, tipo:p.tipo })),
+    agotados: stock.filter(p => p.activo !== false && p.stock === 0).map(p => ({ nombre: p.nombre, stock: p.stock, minimo:p.stockMinimo ?? 5, tipo:p.tipo })),
     topProductos: Object.entries(productos).sort((a, b) => b[1] - a[1]).slice(0, 5)
   });
 });
