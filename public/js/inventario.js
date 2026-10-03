@@ -15,7 +15,7 @@ function verInventario(){
 }
 
 async function crearProducto(){
-  await fetch("/productos",{
+  const res = await fetch("/productos",{
     method:"POST",
     headers:{
       "Content-Type":"application/json",
@@ -23,29 +23,31 @@ async function crearProducto(){
     },
     body:JSON.stringify({
       nombre:document.getElementById("n").value,
-      precio:document.getElementById("p").value,
-      stock:document.getElementById("s").value,
+      precio:Number(document.getElementById("p").value),
+      stock:Number(document.getElementById("s").value),
       categoria:document.getElementById("c").value
     })
   });
-
-  socket.emit("actualizar_manual");
+  const data = await res.json();
+  if(!res.ok){ alert(data.error || "No se pudo crear el producto"); return; }
+  document.getElementById("n").value = "";
+  document.getElementById("p").value = "";
+  document.getElementById("s").value = "";
   cargarProductos();
 }
 
 async function cargarProductos(){
-  const res = await fetch("/productos");
+  const res = await fetch("/productos", { headers:{ "Authorization":token } });
   const data = await res.json();
 
   const cont = document.getElementById("listaProd");
-  cont.innerHTML="";
+  cont.replaceChildren();
+  if(!res.ok) { cont.textContent = data.error || "No se pudieron cargar los productos"; return; }
 
   data.forEach(p=>{
     // Creamos un contenedor para la fila
     const div = document.createElement("div");
-    div.innerHTML = 
-  p.nombre + " - S/" + p.precio +
-  " | Stock: " + p.stock + " ";
+    div.textContent = `${p.nombre} - S/${p.precio} | Stock: ${p.stock} `;
     
   const btnMas = document.createElement("button");
    btnMas.innerText = "➕";
@@ -58,12 +60,6 @@ async function cargarProductos(){
    div.appendChild(btnMas);
    div.appendChild(btnMenos);
     // Creamos el botón "sin errores"
-    const btn = document.createElement("button");
-    btn.innerText = "❌";
-    btn.onclick = () => eliminarProducto(p._id);
-    
-    // Agregamos el botón al div, y el div al contenedor principal
-    div.appendChild(btn);
     cont.appendChild(div);
   });
 }
@@ -81,7 +77,7 @@ async function modificarStock(id, cambio){
 
   const data = await res.json();
 
-  if(data.error){
+  if(!res.ok || data.error){
     alert("❌ " + data.error);
     return;
   }
@@ -90,11 +86,9 @@ async function modificarStock(id, cambio){
 }
 
 async function eliminarProducto(id){
-  await fetch("/productos/"+id,{
-    method:"DELETE",
-    headers:{ "Authorization":token }
-  });
-
+  const res = await fetch("/productos/"+id,{ method:"DELETE", headers:{ "Authorization":token } });
+  const data = await res.json();
+  if(!res.ok) alert(data.error || "No se pudo eliminar el producto");
   cargarProductos();
 }
 

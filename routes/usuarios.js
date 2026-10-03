@@ -1,275 +1,151 @@
 const express = require("express");
-
-const router = express.Router();
-
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-
+const mongoose = require("mongoose");
 const Usuario = require("../models/Usuario");
+const { auth, soloAdmin, soloAdminPrincipal } = require("../middlewares/auth");
 
-const {
-  auth,
-  soloAdmin,
-  soloAdminPrincipal
-} = require("../middlewares/auth");
-
-const SECRET = process.env.JWT_SECRET;
-const Asistencia = require("../models/Asistencia");
-const fechaLocal = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(new Date());
+const ROLES = ["admin", "barra", "mesero"];
+const esId = id => mongoose.isValidObjectId(id);
+const publicUser = user => ({
+  _id: user._id,
+  username: user.username,
+  rol: user.rol,
+  activo: user.activo,
+  estadoLaboral: user.estadoLaboral,
+  ultimaConexion: user.ultimaConexion,
+  ultimaDesconexion: user.ultimaDesconexion,
+  horario: user.horario
+});
 
 module.exports = () => {
+  const router = express.Router();
+  const loginAttempts = new Map();
 
-  // LOGIN
   router.post("/login", async (req, res) => {
-
-    const { username, password } = req.body;
-
-    if (typeof username !== "string" || typeof password !== "string" || !username.trim() || !password) {
+    const now = Date.now();
+    const ip = req.ip || "unknown";
+    if (loginAttempts.size > 5000) {
+      for (const [address, entry] of loginAttempts) if (entry.expiresAt <= now) loginAttempts.delete(address);
+    }
+    let attempts = loginAttempts.get(ip);
+    if (!attempts || attempts.expiresAt <= now) attempts = { count: 0, expiresAt: now + 15 * 60 * 1000 };
+    if (attempts.count >= 10) return res.status(429).json({ error: "Demasiados intentos; espera 15 minutos" });
+    attempts.count += 1;
+    loginAttempts.set(ip, attempts);
+    const username = typeof req.body.username === "string" ? req.body.username.trim() : "";
+    const password = req.body.password;
+    if (!username || typeof password !== "string" || !password || password.length > 1024) {
       return res.status(400).json({ error: "Usuario y contraseña son obligatorios" });
     }
-
-    const u = await Usuario.findOne({ username });
-
-    if (!u) {
-      return res.json({ error: true });
+    if (!process.env.JWT_SECRET) return res.status(503).json({ error: "Autenticación no configurada" });
+    const user = await Usuario.findOne({ username });
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(401).json({ error: "Usuario o contraseña incorrectos" });
     }
-
-    const valido = await bcrypt.compare(
-      password,
-      u.password
-    );
-
-    if (!valido) {
-      return res.json({ error: true });
-    }
-
-    if (["mesero", "barra"].includes(u.rol)) {
-      const ahora = new Date();
-      u.estadoLaboral = "activo";
-      u.ultimaConexion = ahora;
-      await u.save();
-      await Asistencia.findOneAndUpdate(
-        { trabajador: u._id, fecha: fechaLocal() },
-        { $setOnInsert: { trabajador: u._id, fecha: fechaLocal(), entrada: ahora, estado: "asistio", registradoPor: u.username }, $set: { estadoActual: "activo" }, $push: { eventos: { estado: "activo", fecha: ahora } } },
-        { upsert: true }
-      );
-    }
-
-    const token = jwt.sign(
-      {
-        id: u._id,
-        username: u.username,
-        rol: u.rol
-      },
-      SECRET,
-      {
-        expiresIn: "8h"
-      }
-    );
-
-    res.json({
-      token,
-      rol: u.rol,
-      username: u.username
-    });
-
+    if (user.activo === false) return res.status(403).json({ error: "Esta cuenta está desactivada" });
+    user.ultimaConexion = new Date();
+    await user.save();
+    loginAttempts.delete(ip);
+    const token = jwt.sign({ id: String(user._id) }, process.env.JWT_SECRET, { expiresIn: "8h" });
+    return res.json({ token, rol: user.rol, username: user.username });
   });
 
-  // CREAR USUARIO
   router.post("/", auth, soloAdmin, async (req, res) => {
-
-    const { username, password, rol } = req.body;
-
-    if (!username || typeof password !== "string" || password.length < 8 || !["admin", "barra", "mesero"].includes(rol)) {
+    const username = typeof req.body.username === "string" ? req.body.username.trim() : "";
+    const { password, rol } = req.body;
+    if (username.length < 3 || username.length > 120 || typeof password !== "string" || password.length < 8 || password.length > 1024 || !ROLES.includes(rol)) {
       return res.status(400).json({ error: "Datos de usuario inválidos" });
     }
-
-    const existe = await Usuario.findOne({
-      username
-    });
-
-    if (existe) {
-
-      return res.json({
-        error: "Usuario ya existe"
-      });
-
-    }
-
-    const hash = await bcrypt.hash(password, 10);
-
-    const nuevo = await Usuario.create({
-
-      username,
-
-      password: hash,
-
-      rol
-
-    });
-
-    res.json(nuevo);
-
+    if (await Usuario.exists({ username })) return res.status(409).json({ error: "Usuario ya existe" });
+    const user = await Usuario.create({ username, password: await bcrypt.hash(password, 12), rol });
+    return res.status(201).json(publicUser(user));
   });
 
-  // LISTAR
-  router.get("/", auth, soloAdmin, async (req, res) => {
-
-    const usuarios = await Usuario.find().select("username rol activo estadoLaboral ultimaConexion ultimaDesconexion horario");
-
-    res.json(usuarios);
-
+  router.get("/", auth, soloAdmin, async (_req, res) => {
+    const users = await Usuario.find().sort({ username: 1 });
+    return res.json(users.map(publicUser));
   });
 
-  // ELIMINAR
-  router.delete("/:id", auth, soloAdmin, async (req, res) => {
-
-    const user = await Usuario.findById(
-      req.params.id
-    );
-
+  router.put("/:id/rol", auth, soloAdminPrincipal, async (req, res) => {
+    if (!esId(req.params.id)) return res.status(400).json({ error: "Identificador inválido" });
+    if (!ROLES.includes(req.body.rol)) return res.status(400).json({ error: "Rol inválido" });
+    const user = await Usuario.findById(req.params.id);
     if (!user) return res.sendStatus(404);
-
-    if (user.username === "admin@titan02") {
-
-      return res.json({
-        error:
-          "No puedes eliminar el admin principal"
-      });
-
-    }
-
-    await Usuario.findByIdAndDelete(req.params.id);
-
-    res.json({ ok: true });
-
+    if (user.username === "admin@titan02") return res.status(400).json({ error: "No puedes modificar el admin principal" });
+    if (user._id.equals(req.user.id)) return res.status(400).json({ error: "No puedes cambiar tu propio rol" });
+    user.rol = req.body.rol;
+    if (!['mesero', 'barra'].includes(user.rol)) user.estadoLaboral = "desconectado";
+    await user.save();
+    return res.json({ ok: true });
   });
 
-  // CAMBIAR ROL
-  router.put("/:id/rol",
-    auth,
-    soloAdminPrincipal,
-    async (req, res) => {
+  router.put("/:id/activo", auth, soloAdminPrincipal, async (req, res) => {
+    if (!esId(req.params.id)) return res.status(400).json({ error: "Identificador inválido" });
+    if (typeof req.body.activo !== "boolean") return res.status(400).json({ error: "Estado de cuenta inválido" });
+    const user = await Usuario.findById(req.params.id);
+    if (!user) return res.sendStatus(404);
+    if (user.username === "admin@titan02" || user._id.equals(req.user.id) && !req.body.activo) {
+      return res.status(400).json({ error: "No puedes desactivar esta cuenta" });
+    }
+    user.activo = req.body.activo;
+    if (!user.activo) {
+      user.estadoLaboral = "desconectado";
+      user.ultimaDesconexion = new Date();
+    }
+    await user.save();
+    return res.json({ ok: true, activo: user.activo });
+  });
 
-      const { rol } = req.body;
+  // Keep historical references intact: DELETE is retained as a legacy soft deactivation.
+  router.delete("/:id", auth, soloAdmin, async (req, res) => {
+    if (!esId(req.params.id)) return res.status(400).json({ error: "Identificador inválido" });
+    const user = await Usuario.findById(req.params.id);
+    if (!user) return res.sendStatus(404);
+    if (user.username === "admin@titan02" || user._id.equals(req.user.id)) return res.status(400).json({ error: "No puedes desactivar esta cuenta" });
+    user.activo = false;
+    user.estadoLaboral = "desconectado";
+    user.ultimaDesconexion = new Date();
+    await user.save();
+    return res.json({ ok: true, activo: false });
+  });
 
-      const user = await Usuario.findById(
-        req.params.id
-      );
+  router.put("/:id/password", auth, soloAdminPrincipal, async (req, res) => {
+    if (!esId(req.params.id)) return res.status(400).json({ error: "Identificador inválido" });
+    const nueva = req.body.nueva;
+    if (typeof nueva !== "string" || nueva.length < 8 || nueva.length > 1024) return res.status(400).json({ error: "La contraseña debe tener entre 8 y 1024 caracteres" });
+    const user = await Usuario.findById(req.params.id);
+    if (!user) return res.sendStatus(404);
+    user.password = await bcrypt.hash(nueva, 12);
+    await user.save();
+    return res.json({ ok: true });
+  });
 
-      if (!user) return res.sendStatus(404);
-
-      if (!['admin', 'barra', 'mesero'].includes(rol)) {
-        return res.status(400).json({ error: "Rol inválido" });
-      }
-
-      if (user.username === "admin@titan02") {
-
-        return res.json({
-          error:
-            "No puedes modificar el admin principal"
-        });
-
-      }
-
-      user.rol = rol;
-
-      await user.save();
-
-      res.json({ ok: true });
-
-    });
-
-  // CAMBIAR PASSWORD ADMIN
-  router.put("/:id/password",
-    auth,
-    soloAdminPrincipal,
-    async (req, res) => {
-
-      const { nueva } = req.body;
-
-      const user = await Usuario.findById(
-        req.params.id
-      );
-
-      if (!user) return res.sendStatus(404);
-
-      if (typeof nueva !== "string" || nueva.length < 8) {
-        return res.status(400).json({ error: "La contraseña debe tener al menos 8 caracteres" });
-      }
-
-      const hash = await bcrypt.hash(
-        nueva,
-        10
-      );
-
-      user.password = hash;
-
-      await user.save();
-
-      res.json({ ok: true });
-
-    });
-
-  // CAMBIAR PASSWORD PERSONAL
-  router.put("/cambiar-password",
-    auth,
-    async (req, res) => {
-
-      const { actual, nueva } = req.body;
-
-      const user = await Usuario.findById(
-        req.user.id
-      );
-
-      if (!user) return res.sendStatus(404);
-
-      if (typeof nueva !== "string" || nueva.length < 8) {
-        return res.status(400).json({ error: "La contraseña debe tener al menos 8 caracteres" });
-      }
-
-      const valido = await bcrypt.compare(
-        actual,
-        user.password
-      );
-
-      if (!valido) {
-
-        return res.json({
-          error:
-            "Contraseña actual incorrecta"
+  router.put("/cambiar-password", auth, async (req, res) => {
+    const { actual, nueva } = req.body;
+    if (typeof nueva !== "string" || nueva.length < 8 || nueva.length > 1024 || typeof actual !== "string") {
+      return res.status(400).json({ error: "Contraseña inválida" });
+    }
+    const user = await Usuario.findById(req.user.id);
+    if (!user || !(await bcrypt.compare(actual, user.password))) return res.status(401).json({ error: "Contraseña actual incorrecta" });
+    user.password = await bcrypt.hash(nueva, 12);
+    await user.save();
+    return res.json({ ok: true });
   });
 
   router.post("/mi-estado", auth, async (req, res) => {
     const permitidos = ["activo", "descanso", "servicios_higienicos", "almuerzo", "reunion", "otro", "fin_turno"];
-    if (!["mesero", "barra"].includes(req.user.rol) || !permitidos.includes(req.body.estado)) return res.status(400).json({ error: "Estado inválido" });
+    if (!["mesero", "barra"].includes(req.user.rol) || !permitidos.includes(req.body.estado)) {
+      return res.status(400).json({ error: "Estado inválido" });
+    }
+    const usuario = await Usuario.findById(req.user.id);
+    if (!usuario || usuario.activo === false) return res.status(403).json({ error: "Cuenta no disponible" });
     const ahora = new Date();
-    const finTurno = req.body.estado === "fin_turno";
-    const estado = finTurno ? "desconectado" : req.body.estado;
-    const usuario = await Usuario.findByIdAndUpdate(req.user.id, { estadoLaboral: estado, ...(finTurno ? { ultimaDesconexion: ahora } : {}) }, { new: true });
-    await Asistencia.findOneAndUpdate(
-      { trabajador: usuario._id, fecha: fechaLocal() },
-      { $setOnInsert: { trabajador: usuario._id, fecha: fechaLocal(), entrada: ahora, estado: "asistio", registradoPor: usuario.username }, $set: { estadoActual: estado, ...(finTurno ? { salida: ahora } : {}) }, $push: { eventos: { estado, fecha: ahora } } },
-      { upsert: true }
-    );
-    res.json({ ok: true, estado, fecha: ahora });
+    usuario.estadoLaboral = req.body.estado === "fin_turno" ? "desconectado" : req.body.estado;
+    if (req.body.estado === "fin_turno") usuario.ultimaDesconexion = ahora;
+    await usuario.save();
+    return res.json({ ok: true, estado: usuario.estadoLaboral, fecha: ahora });
   });
 
-      }
-
-      const hash = await bcrypt.hash(
-        nueva,
-        10
-      );
-
-      user.password = hash;
-
-      await user.save();
-
-      res.json({ ok: true });
-
-    });
-
   return router;
-
 };

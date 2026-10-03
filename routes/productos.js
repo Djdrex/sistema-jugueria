@@ -1,73 +1,37 @@
 const express = require("express");
-
-const router = express.Router();
-
+const mongoose = require("mongoose");
 const Producto = require("../models/Producto");
+const { auth, soloAdmin } = require("../middlewares/auth");
 
-const {
-  auth,
-  soloAdmin
-} = require("../middlewares/auth");
-
-module.exports = (io) => {
-
-  // CREAR PRODUCTO
+module.exports = io => {
+  const router = express.Router();
   router.post("/", auth, soloAdmin, async (req, res) => {
-
-    const p = await Producto.create(req.body);
-
+    const { nombre, categoria, precio, stock } = req.body;
+    if (typeof nombre !== "string" || !nombre.trim() || nombre.trim().length > 160 || typeof categoria !== "string" || categoria.trim().length > 80 || !Number.isFinite(precio) || precio < 0 || Math.round(precio * 100) !== precio * 100 || !Number.isInteger(stock) || stock < 0) {
+      return res.status(400).json({ error: "Nombre, categoría, precio y stock inválidos" });
+    }
+    const producto = await Producto.create({ nombre: nombre.trim(), categoria: categoria.trim(), precio, stock });
     io.emit("actualizar");
-
-    res.json(p);
+    return res.status(201).json(producto);
   });
 
-  // LISTAR PRODUCTOS
-  router.get("/", async (req, res) => {
+  router.get("/", auth, async (_req, res) => res.json(await Producto.find().sort({ nombre: 1 })));
 
-    res.json(await Producto.find());
-
-  });
-
-  // ELIMINAR PRODUCTO
   router.delete("/:id", auth, soloAdmin, async (req, res) => {
-
-    await Producto.findByIdAndDelete(req.params.id);
-
-    io.emit("actualizar");
-
-    res.json({ ok: true });
-
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: "Identificador inválido" });
+    // Products are referenced by historical orders, so hard deletion is refused.
+    return res.status(405).json({ error: "No se elimina el historial. Actualiza o descontinúa el producto" });
   });
 
-  // MODIFICAR STOCK
   router.put("/:id/stock", auth, soloAdmin, async (req, res) => {
-
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: "Identificador inválido" });
     const { cambio } = req.body;
-
-    const p = await Producto.findById(req.params.id);
-
-    if (!p) {
-      return res.sendStatus(404);
-    }
-
-    if (p.stock + cambio < 0) {
-
-      return res.json({
-        error: "Stock no puede ser negativo"
-      });
-
-    }
-
-    p.stock = Math.max(0, p.stock + cambio);
-
-    await p.save();
-
+    if (!Number.isInteger(cambio) || cambio === 0 || Math.abs(cambio) > 100000) return res.status(400).json({ error: "El cambio de stock debe ser un entero distinto de cero" });
+    const update = await Producto.updateOne({ _id: req.params.id, ...(cambio < 0 ? { stock: { $gte: -cambio } } : {}) }, { $inc: { stock: cambio } });
+    if (!update.matchedCount) return res.status(409).json({ error: "Producto inexistente o stock insuficiente" });
+    const producto = await Producto.findById(req.params.id);
     io.emit("actualizar");
-
-    res.json({ ok: true });
-
+    return res.json(producto);
   });
-
   return router;
-
 };

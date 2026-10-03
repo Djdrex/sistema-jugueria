@@ -45,16 +45,6 @@ async function verActividad(){
   (data || []).forEach(a => { const fila = document.createElement("div"); fila.textContent = `${a.usuario} | ${a.accion} | ${a.detalle} | ${new Date(a.fecha).toLocaleString()}`; cont.appendChild(fila); });
 }
 
-async function resetSistema(){
-  const confirmacion = prompt("Escribe CONFIRMAR para reiniciar");
-  if(confirmacion !== "CONFIRMAR") return;
-  const res = await fetch("/reset", { method:"DELETE", headers:{ "Authorization":token, "Content-Type":"application/json" }, body:JSON.stringify({ confirmacion }) });
-  const data = await res.json();
-  if(data.error) return alert(data.error);
-  socket.emit("actualizar_manual");
-  alert("Sistema reiniciado");
-}
-
 async function cargarInformes(){
   const res = await fetch("/pedidos", { headers:{ "Authorization":token } });
   const data = await res.json();
@@ -64,20 +54,8 @@ async function cargarInformes(){
   (data || []).filter(p => p.estado === "entregado").forEach(p => {
     const fila = document.createElement("div");
     fila.textContent = `Mesa ${p.mesa} S/${p.total} `;
-    const eliminar = document.createElement("button");
-    eliminar.textContent = "Eliminar";
-    eliminar.onclick = () => eliminarPedido(p._id);
-    fila.appendChild(eliminar);
     cont.appendChild(fila);
   });
 }
 
-async function eliminarPedido(id){
-  const res = await fetch(`/pedidos/${id}`, { method:"DELETE", headers:{ "Authorization":token } });
-  const data = await res.json();
-  if(data.error) return alert(data.error);
-  socket.emit("actualizar_manual");
-  cargarInformes();
-}
-
-Object.assign(window, { verDashboard, cargarDashboard, verInformes, generarReporte, verActividad, resetSistema, cargarInformes, eliminarPedido });
+Object.assign(window, { verDashboard, cargarDashboard, verInformes, generarReporte, verActividad, cargarInformes });

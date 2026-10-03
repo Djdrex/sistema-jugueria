@@ -22,7 +22,6 @@ function cargarTabs(){
     html += "<button onclick='verTrabajadores()'>Trabajadores</button>";
     html += "<button onclick='verPersonalActivo()'>Personal activo</button>";
     html += "<button onclick='verActividad()'>Actividad</button>";
-    html += "<button onclick='resetSistema()'>RESET</button>";
   }
 
   document.getElementById("tabs").innerHTML = html;

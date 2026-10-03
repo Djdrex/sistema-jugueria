@@ -20,6 +20,7 @@ async function cargarPedidos(){
   const cont = document.getElementById("lista");
 
   if(!cont) return;
+  if(!res.ok || !Array.isArray(data)) { cont.textContent = data.error || "No se pudieron cargar los pedidos"; return; }
 
   const nuevosPedidos =
     data.length > pedidosPrevios.length;
@@ -56,10 +57,10 @@ async function cargarPedidos(){
     div.style.borderRadius = "8px";
 
     let html =
-      "<b>Mesa " + p.mesa + "</b><br>";
+      "<b>Mesa " + escapeHtml(p.mesa) + "</b><br>";
 
     html +=
-      "<b>Total: S/ " + p.total + "</b><br>";
+      "<b>Total: S/ " + Number(p.total).toFixed(2) + "</b><br>";
 
     let fecha = new Date(p.fecha);
 
@@ -106,7 +107,7 @@ async function cargarPedidos(){
       .forEach(([nombre, cantidad]) => {
 
         html +=
-          cantidad + "x " + nombre + "<br>";
+          cantidad + "x " + escapeHtml(nombre) + "<br>";
 
       });
 
@@ -116,22 +117,22 @@ async function cargarPedidos(){
 
     btn1.innerText = "Preparando";
 
-    btn1.onclick = () =>
-      cambiarEstado(p._id, "preparando");
+    btn1.onclick = event =>
+      cambiarEstado(p._id, "preparando", event.currentTarget);
 
     const btn2 = document.createElement("button");
 
     btn2.innerText = "Listo";
 
-    btn2.onclick = () =>
-      cambiarEstado(p._id, "listo");
+    btn2.onclick = event =>
+      cambiarEstado(p._id, "listo", event.currentTarget);
 
     const btn3 = document.createElement("button");
 
     btn3.innerText = "Entregado";
 
-    btn3.onclick = () =>
-      cambiarEstado(p._id, "entregado");
+    btn3.onclick = event =>
+      cambiarEstado(p._id, "entregado", event.currentTarget);
 
     div.appendChild(document.createElement("br"));
 
@@ -166,16 +167,21 @@ async function cargarPedidos(){
   pedidosPrevios = data;
 }
 
-async function cambiarEstado(id,estado){
-
-  await fetch("/pedidos/"+id,{
-    method:"PUT",
-    headers:{
-      "Content-Type":"application/json",
-      "Authorization":token
-    },
-    body:JSON.stringify({estado})
-  });
+async function cambiarEstado(id,estado,boton){
+  if(boton) boton.disabled = true;
+  try {
+    const res = await fetch("/pedidos/"+id,{
+      method:"PUT",
+      headers:{ "Content-Type":"application/json", "Authorization":token },
+      body:JSON.stringify({estado})
+    });
+    const data = await res.json();
+    if(!res.ok) { alert(data.error || "No se pudo actualizar el pedido"); await cargarPedidos(); return; }
+  } catch {
+    alert("No se pudo conectar con el servidor");
+  } finally {
+    if(boton) boton.disabled = false;
+  }
 
   if(estado === "listo" && sonidoActivo){
 

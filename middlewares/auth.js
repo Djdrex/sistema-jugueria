@@ -1,24 +1,31 @@
 const jwt = require("jsonwebtoken");
+const Usuario = require("../models/Usuario");
 
-const SECRET = process.env.JWT_SECRET;
-
-function auth(req, res, next) {
+async function auth(req, res, next) {
 
   const authorization = req.headers.authorization;
   const token = authorization && authorization.startsWith("Bearer ")
     ? authorization.slice(7)
     : authorization;
 
-  if (!token) {
+  if (!token || !process.env.JWT_SECRET) {
     return res.status(401).json({ error: "Autenticación requerida" });
   }
 
   try {
-    const decoded = jwt.verify(token, SECRET);
-    req.user = decoded;
-    next();
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const usuario = await Usuario.findById(decoded.id).select("username rol activo");
+    if (!usuario || usuario.activo === false) {
+      return res.status(403).json({ error: "Esta cuenta está desactivada" });
+    }
+    // Read current permissions from MongoDB so role changes take effect immediately.
+    req.user = { id: String(usuario._id), username: usuario.username, rol: usuario.rol };
+    return next();
   } catch (err) {
-    return res.status(403).json({ error: "Token inválido o expirado" });
+    if (err.name === "JsonWebTokenError" || err.name === "TokenExpiredError") {
+      return res.status(403).json({ error: "Token inválido o expirado" });
+    }
+    return next(err);
   }
 }
 

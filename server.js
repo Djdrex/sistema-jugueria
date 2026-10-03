@@ -7,12 +7,10 @@ require("dotenv").config();
 // IMPORTS
 
 const jwt = require("jsonwebtoken");
-const bcrypt = require("bcrypt");
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
-const SECRET = process.env.JWT_SECRET;
 const productosRoutes = require("./routes/productos");
 const pedidosRoutes = require("./routes/pedidos");
 const usuariosRoutes = require("./routes/usuarios");
@@ -30,11 +28,34 @@ const {
 // APP
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const trustedProxyHops = Number(process.env.TRUST_PROXY_HOPS || 0);
+if (!Number.isInteger(trustedProxyHops) || trustedProxyHops < 0 || trustedProxyHops > 5) throw new Error("TRUST_PROXY_HOPS debe ser un entero entre 0 y 5");
+app.set("trust proxy", trustedProxyHops);
+const PORT = process.env.PORT || 3000;
+const configuredOrigins = (process.env.CORS_ORIGINS || "").split(",").map(value => value.trim()).filter(Boolean);
+const corsOrigins = [...new Set([...configuredOrigins, process.env.RENDER_EXTERNAL_URL, `http://localhost:${PORT}`, `http://127.0.0.1:${PORT}`].filter(Boolean))];
+const allowOrigin = (origin, callback) => {
+  if (!origin || corsOrigins.includes(origin)) return callback(null, true);
+  return callback(new Error("Origen CORS no permitido"));
+};
+const io = new Server(server, { cors: { origin: allowOrigin } });
+
+io.use(async (socket, next) => {
+  try {
+    if (!process.env.JWT_SECRET) return next(new Error("Autenticación no configurada"));
+    const decoded = jwt.verify(socket.handshake.auth?.token || "", process.env.JWT_SECRET);
+    const user = await Usuario.findById(decoded.id).select("username rol activo");
+    if (!user || user.activo === false) return next(new Error("No autorizado"));
+    socket.data.user = { id: String(user._id), username: user.username, rol: user.rol };
+    return next();
+  } catch {
+    return next(new Error("No autorizado"));
+  }
+});
 
 // MIDDLEWARES
-app.use(express.json());
-app.use(cors());
+app.use(express.json({ limit: "64kb" }));
+app.use(cors({ origin: allowOrigin }));
 app.use("/productos", productosRoutes(io));
 app.use("/pedidos", pedidosRoutes(io));
 app.use("/usuarios", usuariosRoutes());
@@ -43,11 +64,6 @@ app.use("/trabajadores", trabajadoresRoutes);
 app.use(express.static("public"));
 
 // DB
-mongoose.connect(process.env.MONGO_URI, {
-  family: 4
-})
-  .then(() => console.log("🟢 Mongo conectado"))
-  .catch(err => console.log("🔴 Error Mongo:", err));
 
 // MODELOS
 const Actividad = require("./models/Actividad");
@@ -76,32 +92,6 @@ async function registrarActividad(usuario, accion, detalle){
 
 }
 
-// ADMIN
-async function crearAdmin() {
-  // 1. Encriptamos la contraseña que tienes en tu archivo .env
-  const hash = await bcrypt.hash(process.env.ADMIN_PASSWORD, 10);
-  
-  // 2. Buscamos al admin
-  const admin = await Usuario.findOne({ username: "admin@titan02" });
-
-  if (!admin) {
-    // Si no existe, lo creamos
-    await Usuario.create({
-      username: "admin@titan02",
-      password: hash,
-      rol: "admin"
-    });
-    console.log("✅ ADMIN creado por primera vez");
-  } else {
-    // 🔥 SI YA EXISTE, LE ACTUALIZAMOS LA CONTRASEÑA
-    admin.password = hash;
-    await admin.save();
-    console.log("✅ Contraseña de ADMIN sincronizada con el .env");
-  }
-}
-crearAdmin();
-
-
 const path = require("path");
 
 app.use(express.static(path.join(__dirname, "public")));
@@ -118,121 +108,25 @@ app.get("/", (req, res) => {
 
 
 app.post("/caja/cerrar", auth, soloAdmin, async (req, res) => {
-
-  const hoy = new Date();
-  hoy.setHours(0,0,0,0);
-
-  const fin = new Date();
-  fin.setHours(23,59,59,999);
-
-  const pedidos = await Pedido.find({
-    fecha: { $gte: hoy, $lte: fin },
-    pagado: true
-  });
-
-  let total = 0;
-
-  pedidos.forEach(p => total += p.total);
-
-  const caja = await Caja.create({
-    totalVentas: total,
-    cantidadPedidos: pedidos.length,
-    cerradoPor: req.user.username
-  });
-
-  res.json(caja);
+  const fechaOperativa = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(new Date());
+  if (await Caja.exists({ fechaOperativa })) return res.status(409).json({ error: "La caja de hoy ya fue cerrada" });
+  const inicio = new Date(`${fechaOperativa}T00:00:00-05:00`);
+  const fin = new Date(new Date(inicio).getTime() + 24 * 60 * 60 * 1000);
+  const pedidos = await Pedido.find({ fecha: { $gte: inicio, $lt: fin }, pagado: true });
+  const total = pedidos.reduce((sum, pedido) => sum + Math.round((Number(pedido.total) || 0) * 100), 0) / 100;
+  try {
+    const caja = await Caja.create({ fechaOperativa, totalVentas: total, cantidadPedidos: pedidos.length, cerradoPor: req.user.username });
+    return res.status(201).json(caja);
+  } catch (err) {
+    if (err.code === 11000) return res.status(409).json({ error: "La caja de hoy ya fue cerrada" });
+    throw err;
+  }
 });
 
 app.get("/caja", auth, soloAdmin, async (req, res) => {
   const data = await Caja.find().sort({ fecha: -1 });
   res.json(data);
 });
-
-app.post("/pedidos/:id/pagar", auth, (req, res, next) => {
-  if (req.user.rol !== "mesero" && req.user.rol !== "admin" && req.user.rol !== "barra") {
-    return res.sendStatus(403);
-  }
-  next();
-}, async (req, res) => {
-
-  const { monto, metodo, recibido, indices } = req.body;
-
-  const pedido = await Pedido.findById(req.params.id);
-
-  if (!pedido) return res.sendStatus(404);
-
-  if (pedido.estado !== "entregado") {
-    return res.json({ error: "El pedido aún no fue entregado" });
-  }
-
-  if (pedido.pagado) {
-    return res.json({ error: "Pedido ya pagado" });
-  }
-
-  const pagado = pedido.totalPagado || 0;
-  const restante = pedido.total - pagado;
-
-  if (monto <= 0) {
-    return res.json({ error: "Monto inválido" });
-  }
-
-  if (monto > restante) {
-    return res.json({ error: "El pago excede el total restante" });
-  }
-
-  let vuelto = 0;
-
-  if (metodo === "efectivo") {
-    if (!recibido || recibido < monto) {
-      return res.json({ error: "Monto recibido inválido" });
-    }
-
-    vuelto = recibido - monto;
-  }
-
-  pedido.pagos.push({
-    monto,
-    metodo,
-    recibido: metodo === "efectivo" ? recibido : null,
-    vuelto,
-    mesero: req.user.username
-  });
-
-  pedido.totalPagado += monto;
-  
-  if(Array.isArray(indices)){
-
-  indices.forEach(i => {
-
-    if(pedido.items[i]){
-      pedido.items[i].pagado = true;
-    }
-
-  });
-
-  }
-
-  if (pedido.totalPagado >= pedido.total) {
-    pedido.pagado = true;
-  }
-
-  await pedido.save();
-  
-  await registrarActividad(
-  req.user.username,
-  "PEDIDO",
-  `Creó pedido para mesa ${pedido.mesa}`
-);
-
-  await registrarActividad(
-  req.user.username,
-  "COBRO",
-  `Cobró S/${monto} en mesa ${pedido.mesa} por ${metodo}`
-);
-
-  res.json(pedido);
-});
-
 
 // 🔐 MIDDLEWARE AUTH
 
@@ -284,19 +178,21 @@ app.get("/reporte", auth, soloAdmin, async (req, res) => {
 
   let filtro = {};
 
+  if (Boolean(desde) !== Boolean(hasta)) return res.status(400).json({ error: "Indica ambas fechas del período" });
   if (desde && hasta) {
-    const fechaDesde = new Date(desde);
-    const fechaHasta = new Date(hasta);
-
-    fechaHasta.setHours(23, 59, 59, 999); // 🔥 CLAVE
+    const validaFecha = value => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T12:00:00Z`)) && new Date(`${value}T12:00:00Z`).toISOString().slice(0, 10) === value;
+    if (!validaFecha(desde) || !validaFecha(hasta) || desde > hasta) return res.status(400).json({ error: "Rango de fechas inválido" });
+    const fechaDesde = new Date(`${desde}T00:00:00-05:00`);
+    const fechaHasta = new Date(`${hasta}T00:00:00-05:00`);
+    fechaHasta.setTime(fechaHasta.getTime() + 24 * 60 * 60 * 1000);
 
     filtro.fecha = {
       $gte: fechaDesde,
-      $lte: fechaHasta
+      $lt: fechaHasta
     };
   }
 
-  const pedidos = await Pedido.find(filtro);
+  const pedidos = await Pedido.find(filtro).sort({ fecha: -1 }).limit(5000);
 
   let total = 0;
 
@@ -317,32 +213,28 @@ app.get("/reporte", auth, soloAdmin, async (req, res) => {
 
 
 // 🔄 RESET SISTEMA (SOLO ADMIN)
-app.delete("/reset", auth, soloAdminPrincipal, async (req, res) => {
-
-  if (req.body.confirmacion !== "CONFIRMAR") {
-    return res.json({ error: "Confirmación requerida" });
-  }
-
-  await Pedido.deleteMany({});
-  await Notificacion.deleteMany({});
-
-
-  io.emit("actualizar");
-
-  res.json({ ok: true });
-});
+app.delete("/reset", auth, soloAdminPrincipal, (_req, res) => res.status(410).json({ error: "El reinicio que elimina datos está deshabilitado" }));
 
 // SOCKET
 io.on("connection", (socket) => {
+  socket.join(`role:${socket.data.user.rol}`);
+  socket.join(`user:${socket.data.user.id}`);
+});
 
-  socket.on("actualizar_manual", () => {
-    io.emit("actualizar");
+app.use((req, res) => res.status(404).json({ error: "Ruta no encontrada" }));
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  const status = Number.isInteger(err.status) && err.status >= 400 && err.status <= 599 ? err.status : 500;
+  if (status >= 500) console.error("Error de solicitud:", err.message);
+  return res.status(status).json({ error: status >= 500 ? "Error interno del servidor" : err.message });
+});
+
+if (!process.env.MONGO_URI || !process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+  throw new Error("Configura MONGO_URI y JWT_SECRET (mínimo 32 caracteres)");
+}
+mongoose.connect(process.env.MONGO_URI, { family: 4 })
+  .then(() => server.listen(PORT, () => console.log(`Servidor listo en puerto ${PORT}`)))
+  .catch(err => {
+    console.error("No se pudo conectar con MongoDB:", err.message);
+    process.exitCode = 1;
   });
-
-});
-
-const PORT = process.env.PORT || 3000;
-
-server.listen(PORT, () => {
-  console.log("🔥 SISTEMA PRO ESTABLE en puerto " + PORT);
-});

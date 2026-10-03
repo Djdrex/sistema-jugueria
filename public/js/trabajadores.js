@@ -34,7 +34,7 @@ async function cargarPersonalActivo(){
   presentes.forEach(t => {
     const tarjeta = document.createElement("article");
     tarjeta.className = "tarjeta-trabajador";
-    tarjeta.innerHTML = `<h4>${t.username} · ${t.rol}</h4><p><strong>${textoEstado(t.estadoLaboral)}</strong></p><p>Se conectó: ${fechaHora(t.ultimaConexion)}</p>`;
+    tarjeta.innerHTML = `<h4>${escapeHtml(t.username)} · ${escapeHtml(t.rol)}</h4><p><strong>${textoEstado(t.estadoLaboral)}</strong></p><p>Se conectó: ${fechaHora(t.ultimaConexion)}</p>`;
     cont.appendChild(tarjeta);
   });
 }
@@ -56,13 +56,13 @@ function tarjetaTrabajador(t){
   const tarjeta = document.createElement("article");
   tarjeta.className = "tarjeta-trabajador";
   const dias = (t.horario?.dias || []).map(d => DIAS[d]).join(", ") || "Sin días asignados";
-  tarjeta.innerHTML = `<h4>${t.username} · ${t.rol}</h4><p><strong>${textoEstado(t.estadoLaboral)}</strong> ${t.activo ? "" : "(cuenta desactivada)"}</p><p>Conexión: ${fechaHora(t.ultimaConexion)} · Fin/desconexión: ${fechaHora(t.ultimaDesconexion)}</p><p>Horario: ${dias} · ${t.horario?.horaEntrada || "—"} a ${t.horario?.horaSalida || "—"}</p>`;
+  tarjeta.innerHTML = `<h4>${escapeHtml(t.username)} · ${escapeHtml(t.rol)}</h4><p><strong>${textoEstado(t.estadoLaboral)}</strong> ${t.activo ? "" : "(cuenta desactivada)"}</p><p>Conexión: ${fechaHora(t.ultimaConexion)} · Fin/desconexión: ${fechaHora(t.ultimaDesconexion)}</p><p>Horario: ${dias} · ${t.horario?.horaEntrada || "—"} a ${t.horario?.horaSalida || "—"}</p>`;
   const form = document.createElement("div");
   form.innerHTML = "<strong>Configurar horario:</strong>";
   DIAS.forEach((dia, indice) => { const etiqueta = document.createElement("label"); const check = document.createElement("input"); check.type = "checkbox"; check.value = indice; check.checked = (t.horario?.dias || []).includes(indice); etiqueta.append(check, ` ${dia} `); form.appendChild(etiqueta); });
   const entrada = document.createElement("input"); entrada.type = "time"; entrada.value = t.horario?.horaEntrada || "";
   const salida = document.createElement("input"); salida.type = "time"; salida.value = t.horario?.horaSalida || "";
-  const activo = document.createElement("input"); activo.type = "checkbox"; activo.checked = t.activo;
+  const activo = document.createElement("input"); activo.type = "checkbox"; activo.checked = t.activo !== false;
   const guardar = document.createElement("button"); guardar.textContent = "Guardar horario"; guardar.onclick = () => guardarHorario(t._id, form, entrada.value, salida.value, activo.checked);
   form.append(" Entrada ", entrada, " Salida ", salida, " Activo ", activo, guardar);
   tarjeta.appendChild(form);

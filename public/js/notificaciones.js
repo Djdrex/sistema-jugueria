@@ -3,7 +3,9 @@ async function cargarNotificaciones(){
     headers:{ "Authorization":token }
   });
 
-  notificaciones = await res.json();
+  const data = await res.json();
+  if(!res.ok || !Array.isArray(data)) { notificaciones = []; return; }
+  notificaciones = data;
 
   renderNotificaciones();
 }
@@ -12,31 +14,45 @@ async function cargarNotificaciones(){
   const panel = document.getElementById("panelNoti");
   const contador = document.getElementById("contadorNoti");
 
-  panel.innerHTML = ""; // 🔥 LIMPIAR ANTES
+  panel.replaceChildren();
+
+  const limpiar = document.createElement("button");
+  limpiar.type = "button";
+  limpiar.textContent = "Limpiar todo";
+  limpiar.addEventListener("click", limpiarNotificaciones);
+  panel.appendChild(limpiar);
 
   let noLeidas = 0;
 
   notificaciones.forEach(n=>{
 
     if(!n.leido) noLeidas++;
+    const textoMensaje = String(n.mensaje || "");
 
     let color = "#333";
 
-    if(n.mensaje.includes("Stock bajo")){
+    if(textoMensaje.includes("Stock bajo")){
       color = "#552222";
     }
 
-    if(n.mensaje.includes("Nuevo pedido")){
+    if(textoMensaje.includes("Nuevo pedido")){
       color = "#223355";
     }
 
-    panel.innerHTML += 
-  "<div style='border-bottom:1px solid gray; padding:5px; background:"+color+"'>" +
-  "<b>" + n.usuario + "</b><br>" +
-  n.mensaje + "<br>" +
-  "<small>" + new Date(n.fecha).toLocaleString() + "</small><br>" +
-  "<button onclick='eliminarNoti(\"" + n._id + "\")'>🗑️</button>" +
-  "</div>";
+    const fila = document.createElement("article");
+    fila.style.cssText = `border-bottom:1px solid gray;padding:5px;background:${color}`;
+    const autor = document.createElement("strong");
+    autor.textContent = n.usuario || "Sistema";
+    const mensaje = document.createElement("p");
+    mensaje.textContent = textoMensaje;
+    const fecha = document.createElement("small");
+    fecha.textContent = new Date(n.fecha).toLocaleString("es-PE");
+    const borrar = document.createElement("button");
+    borrar.type = "button";
+    borrar.textContent = "Eliminar";
+    borrar.addEventListener("click", () => eliminarNoti(n._id));
+    fila.append(autor, mensaje, fecha, document.createElement("br"), borrar);
+    panel.appendChild(fila);
   });
 
   contador.innerText = noLeidas > 0 ? "(" + noLeidas + ")" : "";

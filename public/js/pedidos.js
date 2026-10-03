@@ -28,7 +28,8 @@ async function buscarProducto(){
   const texto = document.getElementById("buscador").value.toLowerCase();
 
   if(productosCache.length === 0){
-    const res = await fetch("/productos");
+    const res = await fetch("/productos", { headers:{ "Authorization":token } });
+    if(!res.ok) throw new Error("No se pudieron cargar los productos");
     productosCache = await res.json();
   }
 
@@ -44,7 +45,7 @@ async function buscarProducto(){
     btn.innerText = p.nombre + " - S/" + p.precio;
 
     btn.onclick = function(){
-      seleccionarProducto(p.nombre, p.precio, p.categoria);
+      seleccionarProducto(p.nombre, p.precio, p.categoria, p._id);
     };
 
     cont.appendChild(btn);
@@ -54,9 +55,9 @@ async function buscarProducto(){
 }
 
 // SELECCIONAR
-function seleccionarProducto(nombre,precio,categoria){
+function seleccionarProducto(nombre,precio,categoria,productoId){
 
-  productoSeleccionado = {nombre,precio,categoria};
+  productoSeleccionado = {nombre,precio,categoria,productoId};
 
   const cont = document.getElementById("opcionesJugo");
   cont.innerHTML = "";
@@ -79,6 +80,7 @@ function agregarProducto(){
 
   let item = {
   producto: productoSeleccionado.nombre,
+  productoId: productoSeleccionado.productoId,
   precio: productoSeleccionado.precio,
   pagado:false
 };
@@ -126,10 +128,15 @@ function renderPreview(){
       texto += " (" + extras.join(", ") + ")";
     }
 
-    cont.innerHTML +=
-      texto +
-      " S/" + i.precio +
-      " <button onclick='eliminarItem(" + index + ")'>❌</button><br>";
+    const fila = document.createElement("div");
+    const nombre = document.createElement("span");
+    nombre.textContent = `${texto} S/${i.precio} `;
+    const quitar = document.createElement("button");
+    quitar.type = "button";
+    quitar.textContent = "Quitar";
+    quitar.addEventListener("click", () => eliminarItem(index));
+    fila.append(nombre, quitar);
+    cont.appendChild(fila);
   });
 }
 
@@ -158,12 +165,14 @@ async function enviarPedido(){
     const btn = document.querySelector("button[onclick='enviarPedido()']");
     btn.disabled = true;
     btn.innerText = "Enviando...";
+    pedidoRequestId ||= crypto.randomUUID();
 
     const res = await fetch("/pedidos",{
       method:"POST",
       headers:{
         "Content-Type":"application/json",
-        "Authorization":token
+        "Authorization":token,
+        "Idempotency-Key":pedidoRequestId
       },
       body:JSON.stringify({
         mesa,
@@ -180,17 +189,18 @@ async function enviarPedido(){
       return;
     }
 
+    if(!res.ok) throw new Error(data.error || "No se pudo registrar el pedido");
+
     alert("✅ Pedido enviado");
 
     pedidoActual = [];
+    pedidoRequestId = null;
 
     renderPreview();
 
     document.getElementById("mesa").value = "";
     document.getElementById("buscador").value = "";
     document.getElementById("resultados").innerHTML = "";
-
-    socket.emit("actualizar_manual");
 
     btn.disabled = false;
     btn.innerText = "Enviar Pedido";
@@ -217,7 +227,9 @@ async function cargarPedidosMesero(){
   });
   const data = await res.json();
 
+
   const cont = document.getElementById("listaCobros");
+  if(!cont || !res.ok || !Array.isArray(data)) { if(cont) cont.textContent = data.error || "No se pudieron cargar los pedidos"; return; }
   cont.innerHTML = "";
 
   data.forEach(p => {
@@ -230,11 +242,11 @@ async function cargarPedidosMesero(){
     div.style.margin = "5px";
     div.style.padding = "10px";
 
-    let html = "<b>Mesa " + p.mesa + "</b><br>";
-    html += "Total: S/" + p.total + "<br><br>";
+    let html = "<b>Mesa " + escapeHtml(p.mesa) + "</b><br>";
+    html += "Total: S/" + Number(p.total).toFixed(2) + "<br><br>";
 
     p.items.forEach(i => {
-      html += "- " + i.producto + "<br>";
+      html += "- " + escapeHtml(i.producto) + "<br>";
     });
 
     div.innerHTML = html;
@@ -254,7 +266,7 @@ async function cobrarPedido(id, pedido){
 
   let html = `
     <h3>💰 Cobrar Pedido</h3>
-    <b>Mesa ${pedido.mesa}</b><br><br>
+    <b>Mesa ${escapeHtml(pedido.mesa)}</b><br><br>
 
     <button onclick="seleccionarTodo()">✅ Seleccionar todo</button>
     <button onclick="deseleccionarTodo()">❌ Limpiar</button>
@@ -264,8 +276,8 @@ async function cobrarPedido(id, pedido){
 
   let pagado = pedido.totalPagado || 0;
 
-  html += `<p>💰 Ya pagado: S/ ${pagado}</p>`;
-  html += `<p>🧾 Restante: S/ ${(pedido.total - pagado).toFixed(2)}</p><br>`;
+  html += `<p>💰 Ya pagado: S/ ${Number(pagado).toFixed(2)}</p>`;
+  html += `<p>🧾 Restante: S/ ${(Number(pedido.total) - Number(pagado)).toFixed(2)}</p><br>`;
   html += "<h4>💰 Pagos realizados</h4>";
 
 if(pedido.pagos && pedido.pagos.length > 0){
@@ -280,7 +292,7 @@ if(pedido.pagos && pedido.pagos.length > 0){
         border-radius:5px;
       ">
 
-        Método: ${p.metodo}<br>
+        Método: ${escapeHtml(p.metodo)}<br>
         Monto: S/${Number(p.monto).toFixed(2)}<br>
 
         ${p.recibido ? `
@@ -288,7 +300,7 @@ if(pedido.pagos && pedido.pagos.length > 0){
           Vuelto: S/${Number(p.vuelto).toFixed(2)}<br>
         ` : ""}
 
-        Mesero: ${p.mesero || "Desconocido"}
+        Mesero: ${escapeHtml(p.mesero || "Desconocido")}
 
       </div>
     `;
@@ -308,7 +320,7 @@ if(pedido.pagos && pedido.pagos.length > 0){
 
     html += `
       <div style="opacity:0.5;color:lightgreen">
-        ✅ ${item.producto} - PAGADO
+        ✅ ${escapeHtml(item.producto)} - PAGADO
       </div>
     `;
 
@@ -319,9 +331,9 @@ if(pedido.pagos && pedido.pagos.length > 0){
       type="checkbox" 
       class="itemCheck" 
       data-index="${index}"
-      data-precio="${item.precio}"
+      data-precio="${Number(item.precio).toFixed(2)}"
     >
-    ${item.producto} - S/${Number(item.precio).toFixed(2)}
+    ${escapeHtml(item.producto)} - S/${Number(item.precio).toFixed(2)}
     <br>
   `;
     });
@@ -419,7 +431,7 @@ function seleccionarMetodo(metodo, id, total, indices){
 
   if(metodo === "yape"){
     zona.innerHTML = `
-      <p>Pago con Yape por S/ ${total}</p>
+      <p>Registra este pago solo después de verificar el abono en la cuenta Yape: S/ ${total}</p>
       <button id="btnConfirmarPago"
 onclick="confirmarPago(
   '${id}',
@@ -482,6 +494,7 @@ Confirmar pago
 }
 
 async function confirmarPago(id, monto, metodo, recibido, indices){
+  paymentAttemptKey ||= crypto.randomUUID();
   
   const btn = document.getElementById("btnConfirmarPago");
 
@@ -490,21 +503,20 @@ if(btn){
   btn.innerText = "Procesando...";
 }
 
-  const res = await fetch("/pedidos/" + id + "/pagar",{
-    method:"POST",
-    headers:{
-      "Content-Type":"application/json",
-      "Authorization":token
-    },
-    body:JSON.stringify({
-  monto:Number(monto),
-  metodo,
-  recibido,
-  indices
-})
-  });
-
-  const data = await res.json();
+  let res, data;
+  try {
+    res = await fetch("/pedidos/" + id + "/pagar",{
+      method:"POST",
+      headers:{ "Content-Type":"application/json", "Authorization":token, "Idempotency-Key":paymentAttemptKey },
+      body:JSON.stringify({ monto:Number(monto), metodo, recibido, indices })
+    });
+    data = await res.json();
+  } catch(err) {
+    if(btn){ btn.disabled = false; btn.innerText = "Reintentar"; }
+    alert("No se pudo confirmar la respuesta del servidor. Reintenta para verificar el mismo pago.");
+    return;
+  }
+  paymentAttemptKey = null;
 
   if(data.error){
     if(btn){
@@ -516,7 +528,6 @@ if(btn){
     alert("✅ Pago registrado");
   }
 
-  socket.emit("actualizar_manual");
   verPedidos();
 }
 

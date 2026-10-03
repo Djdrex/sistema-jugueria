@@ -15,6 +15,8 @@ async function login(){
       token=data.token;
       rol=data.rol;
       username=data.username;
+      socket.auth = { token };
+      socket.connect();
 
       document.getElementById("loginDiv").hidden=true;
       document.getElementById("app").hidden=false;
@@ -37,6 +39,8 @@ window.login = login;
 
 function logout(registrarFin = true){
   if(registrarFin && (rol === "mesero" || rol === "barra")) fetch("/usuarios/mi-estado", { method:"POST", headers:{ "Content-Type":"application/json", "Authorization":token }, body:JSON.stringify({ estado:"fin_turno" }) });
+  socket.disconnect();
+  socket.auth = { token: "" };
   token = "";
   rol = "";
   username = "";

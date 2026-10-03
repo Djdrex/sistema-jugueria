@@ -1,4 +1,4 @@
-const socket = io();
+const socket = io({ autoConnect: false, auth: { token: "" } });
 
 let token = "";
 let rol = "";
@@ -6,6 +6,8 @@ let username = "";
 
 let pedidoActual = [];
 let productoSeleccionado = null;
+let pedidoRequestId = null;
+let paymentAttemptKey = null;
 
 let sonidoActivo = false;
 
@@ -16,6 +18,11 @@ let audio = new Audio(
 let pedidosPrevios = [];
 let notificaciones = [];
 let productosCache = [];
+
+function escapeHtml(value){
+  return String(value ?? "").replace(/[&<>"']/g, char => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", "\"":"&quot;", "'":"&#39;" }[char]));
+}
+window.escapeHtml = escapeHtml;
 
 document.body.addEventListener("click", () => {
 

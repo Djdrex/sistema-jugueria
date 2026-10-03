@@ -1,16 +1,20 @@
 {
-  "name": "downloads",
+  "name": "jugueria-app",
   "version": "1.0.0",
-  "description": "",
+  "description": "Sistema interno de pedidos e inventario para jugueria",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "test": "node --test",
+    "start": "node server.js",
+    "bootstrap-admin": "node scripts/bootstrap-admin.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",

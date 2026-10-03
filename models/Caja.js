@@ -7,6 +7,8 @@ const CajaSchema = new mongoose.Schema({
     default: Date.now
   },
 
+  fechaOperativa: { type: String },
+
   totalVentas: Number,
 
   cantidadPedidos: Number,
@@ -14,5 +16,7 @@ const CajaSchema = new mongoose.Schema({
   cerradoPor: String
 
 });
+
+CajaSchema.index({ fechaOperativa: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model("Caja", CajaSchema);

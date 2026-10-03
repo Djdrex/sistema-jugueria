@@ -1,58 +1,7 @@
-function verUsuarios(){
-  document.getElementById("contenido").innerHTML = "<h3>Panel de Usuarios</h3>Usuario <input id='u'><br>Contraseña <input id='p' type='password'><br>Rol <select id='r'><option value='mesero'>Mesero</option><option value='barra'>Barra</option><option value='admin'>Admin</option></select><br><button onclick='crearUsuario()'>Crear Usuario</button><h4>Lista de usuarios</h4><div id='listaUsuarios'></div>";
-  cargarUsuarios();
-}
-
-async function crearUsuario(){
-  const res = await fetch("/usuarios", { method:"POST", headers:{ "Content-Type":"application/json", "Authorization":token }, body:JSON.stringify({ username:document.getElementById("u").value, password:document.getElementById("p").value, rol:document.getElementById("r").value }) });
-  const data = await res.json();
-  if(data.error) return alert(data.error);
-  document.getElementById("u").value = "";
-  document.getElementById("p").value = "";
-  cargarUsuarios();
-}
-
-async function cargarUsuarios(){
-  const res = await fetch("/usuarios", { headers:{ "Authorization":token } });
-  const data = await res.json(), cont = document.getElementById("listaUsuarios");
-  if(!cont) return;
-  cont.replaceChildren();
-  (data || []).forEach(u => {
-    const fila = document.createElement("div");
-    const principal = u.username === "admin@titan02";
-    const estado = ["mesero", "barra"].includes(u.rol) ? ` · ${u.activo === false ? "cuenta desactivada" : (u.estadoLaboral || "desconectado")}` : "";
-    fila.append(`${u.username} (${u.rol})${estado}${principal ? " ADMIN PRINCIPAL" : ""} `);
-    if(!principal){
-      const eliminar = document.createElement("button"); eliminar.textContent = "Eliminar"; eliminar.onclick = () => eliminarUsuario(u._id); fila.appendChild(eliminar);
-      const selector = document.createElement("select");
-      ["mesero", "barra", "admin"].forEach(rolDisponible => { const opcion = document.createElement("option"); opcion.value = rolDisponible; opcion.textContent = rolDisponible; opcion.selected = rolDisponible === u.rol; selector.appendChild(opcion); });
-      selector.onchange = () => cambiarRol(u._id, selector.value); fila.appendChild(selector);
-    }
-    const password = document.createElement("button"); password.textContent = "Cambiar contraseña"; password.onclick = () => cambiarPasswordAdmin(u._id); fila.appendChild(password);
-    cont.appendChild(fila);
-  });
-}
-
-async function cambiarRol(id, rolNuevo){
-  const res = await fetch(`/usuarios/${id}/rol`, { method:"PUT", headers:{ "Content-Type":"application/json", "Authorization":token }, body:JSON.stringify({ rol:rolNuevo }) });
-  const data = await res.json();
-  if(data.error) alert(data.error);
-  cargarUsuarios();
-}
-
-async function cambiarPasswordAdmin(id){
-  const nueva = prompt("Nueva contraseña:");
-  if(!nueva) return;
-  const res = await fetch(`/usuarios/${id}/password`, { method:"PUT", headers:{ "Content-Type":"application/json", "Authorization":token }, body:JSON.stringify({ nueva }) });
-  const data = await res.json();
-  alert(data.error || "Contraseña actualizada");
-}
-
-async function eliminarUsuario(id){
-  const res = await fetch(`/usuarios/${id}`, { method:"DELETE", headers:{ "Authorization":token } });
-  const data = await res.json();
-  if(data.error) alert(data.error);
-  cargarUsuarios();
-}
-
-Object.assign(window, { verUsuarios, crearUsuario, cargarUsuarios, cambiarRol, cambiarPasswordAdmin, eliminarUsuario });
+function verUsuarios(){ document.getElementById("contenido").innerHTML = "<h3>Panel de Usuarios</h3>Usuario <input id='u'><br>Contraseña <input id='p' type='password'><br>Rol <select id='r'><option value='mesero'>Mesero</option><option value='barra'>Barra</option><option value='admin'>Admin</option></select><br><button onclick='crearUsuario()'>Crear Usuario</button><h4>Lista de usuarios</h4><div id='listaUsuarios'></div>"; cargarUsuarios(); }
+async function crearUsuario(){ const res = await fetch("/usuarios", { method:"POST", headers:{ "Content-Type":"application/json", Authorization:token }, body:JSON.stringify({ username:u.value, password:p.value, rol:r.value }) }); const data = await res.json(); if(data.error) return alert(data.error); u.value = ""; p.value = ""; cargarUsuarios(); }
+async function cargarUsuarios(){ const res = await fetch("/usuarios", { headers:{ Authorization:token } }); const data = await res.json(), cont = document.getElementById("listaUsuarios"); if(!cont || !res.ok) return; cont.replaceChildren(); data.forEach(u => { const fila = document.createElement("div"), principal = u.username === "admin@titan02", cuenta = u.activo === false ? "Cuenta desactivada" : "Cuenta activa", turno = ["mesero", "barra"].includes(u.rol) ? ` - Turno: ${u.estadoLaboral || "desconectado"}` : ""; fila.append(`${u.username} (${u.rol}) - ${cuenta}${turno}${principal ? " ADMIN PRINCIPAL" : ""} `); if(!principal){ const selector = document.createElement("select"); ["mesero", "barra", "admin"].forEach(rol => selector.appendChild(new Option(rol, rol, false, rol === u.rol))); selector.onchange = () => cambiarRol(u._id, selector.value); fila.appendChild(selector); const estado = document.createElement("button"); estado.textContent = u.activo === false ? "Activar cuenta" : "Desactivar cuenta"; estado.onclick = () => cambiarEstadoCuenta(u._id, u.activo === false); fila.appendChild(estado); } const password = document.createElement("button"); password.textContent = "Cambiar contraseña"; password.onclick = () => cambiarPasswordAdmin(u._id); fila.appendChild(password); cont.appendChild(fila); }); }
+async function cambiarRol(id, rol){ const res = await fetch(`/usuarios/${id}/rol`, { method:"PUT", headers:{ "Content-Type":"application/json", Authorization:token }, body:JSON.stringify({ rol }) }); const data = await res.json(); if(!res.ok || data.error) alert(data.error || "No se pudo cambiar el rol"); cargarUsuarios(); }
+async function cambiarEstadoCuenta(id, activo){ const res = await fetch(`/usuarios/${id}/activo`, { method:"PUT", headers:{ "Content-Type":"application/json", Authorization:token }, body:JSON.stringify({ activo }) }); const data = await res.json(); if(!res.ok || data.error) return alert(data.error || "No se pudo actualizar la cuenta"); cargarUsuarios(); }
+async function cambiarPasswordAdmin(id){ const nueva = prompt("Nueva contraseña:"); if(!nueva) return; const res = await fetch(`/usuarios/${id}/password`, { method:"PUT", headers:{ "Content-Type":"application/json", Authorization:token }, body:JSON.stringify({ nueva }) }); const data = await res.json(); alert(data.error || "Contraseña actualizada"); }
+Object.assign(window, { verUsuarios, crearUsuario, cargarUsuarios, cambiarRol, cambiarEstadoCuenta, cambiarPasswordAdmin });
