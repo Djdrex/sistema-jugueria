@@ -9,6 +9,7 @@ require("dotenv").config();
 const jwt = require("jsonwebtoken");
 const express = require("express");
 const http = require("http");
+const path = require("path");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 const productosRoutes = require("./routes/productos");
@@ -16,6 +17,8 @@ const pedidosRoutes = require("./routes/pedidos");
 const usuariosRoutes = require("./routes/usuarios");
 const notificacionesRoutes = require("./routes/notificaciones");
 const trabajadoresRoutes = require("./routes/trabajadores");
+const gastosRoutes = require("./routes/gastos");
+const pagosPersonalRoutes = require("./routes/pagosPersonal");
 
 const {
   auth,
@@ -61,7 +64,9 @@ app.use("/pedidos", pedidosRoutes(io));
 app.use("/usuarios", usuariosRoutes());
 app.use("/notificaciones", notificacionesRoutes(io));
 app.use("/trabajadores", trabajadoresRoutes);
-app.use(express.static("public"));
+app.use("/gastos", gastosRoutes);
+app.use("/pagos-personal", pagosPersonalRoutes());
+app.use(express.static(path.join(__dirname, "public")));
 
 // DB
 
@@ -91,10 +96,6 @@ async function registrarActividad(usuario, accion, detalle){
   }
 
 }
-
-const path = require("path");
-
-app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));

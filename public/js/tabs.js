@@ -22,6 +22,8 @@ function cargarTabs(){
     html += "<button onclick='verTrabajadores()'>Trabajadores</button>";
     html += "<button onclick='verPersonalActivo()'>Personal activo</button>";
     html += "<button onclick='verActividad()'>Actividad</button>";
+    html += "<button onclick='verGastos()'>Gastos y compras</button>";
+    html += "<button onclick='verPagosPersonal()'>Pagos al personal</button>";
   }
 
   document.getElementById("tabs").innerHTML = html;

@@ -24,7 +24,7 @@ Abre `http://localhost:3000`. El servidor no crea ni cambia cuentas o documentos
 ## Organización
 
 - `server.js`: configuración de Express, conexión de MongoDB, Socket.IO y rutas generales antiguas.
-- `routes/`: API para pedidos, productos, usuarios, avisos y trabajadores.
+- `routes/`: API para pedidos, productos, usuarios, avisos, trabajadores, gastos/compras y registro interno de pagos al personal.
 - `models/`: documentos Mongoose existentes.
 - `middlewares/auth.js`: validación JWT y permisos por rol.
 - `services/`: funciones de dominio compartidas.
@@ -46,7 +46,7 @@ Abre `http://localhost:3000`. El servidor no crea ni cambia cuentas o documentos
 
 ## Base de pruebas y copias de seguridad
 
-Configura `MONGO_URI` para que apunte a una base distinta de producción antes de probar endpoints con datos. Mantén datos de prueba aislados. Actualmente `npm test` solo ejecuta pruebas de conversión y suma de importes; no prueba rutas conectadas ni flujos completos contra MongoDB.
+Configura `MONGO_URI` para que apunte a una base distinta de producción antes de probar endpoints con datos. Mantén datos de prueba aislados. `npm test` valida importes y entradas de gastos/pagos internos; no prueba rutas conectadas ni transacciones contra MongoDB.
 
 Para MongoDB local, usa `mongodump` hacia un directorio de respaldo protegido. Para Atlas, usa la herramienta de respaldo del clúster o `mongodump` con una URI guardada en un entorno seguro. No pegues URI con credenciales en historial de terminal o tickets. Antes de restaurar, restaura a una base alternativa y comprueba colecciones y conteos; solo después planifica una restauración de producción con una copia reciente y una ventana de mantenimiento. La configuración de retención depende del proveedor.
 

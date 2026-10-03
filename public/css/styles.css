@@ -14,3 +14,92 @@ input, select { background: #222; color: inherit; border: 1px solid #666; }
   main { padding-top: 56px; }
   #tabs button { flex: 1 1 45%; }
 }
+
+/* Shared administrative workspace: usable with touch input and narrow screens. */
+:root {
+  color-scheme: dark;
+  --surface: #1b2027;
+  --surface-raised: #232a33;
+  --border: #39434f;
+  --muted: #aab5c2;
+  --accent: #70d6a5;
+  --danger: #ff8a8a;
+}
+body { background: #11161c; line-height: 1.5; }
+main { width: min(1280px, 100%); padding: clamp(12px, 3vw, 28px); }
+h1, h2, h3, h4, p { margin-top: 0; }
+button {
+  padding: 8px 14px;
+  border: 1px solid #536171;
+  border-radius: 8px;
+  color: #f5f7fa;
+  background: var(--surface-raised);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+button:hover:not(:disabled) { border-color: var(--accent); background: #2b3742; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 3px solid #70d6a588;
+  outline-offset: 2px;
+}
+button:disabled { cursor: wait; opacity: .6; }
+input, select, textarea {
+  min-height: 42px;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #141a20;
+}
+textarea { resize: vertical; }
+#loginDiv { max-width: 420px; margin: clamp(30px, 10vh, 100px) auto; padding: 24px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+#loginDiv label { display: block; }
+#info { padding-right: 210px; overflow-wrap: anywhere; }
+#tabs { gap: 8px; margin: 16px 0 22px; }
+#tabs button { min-height: 42px; }
+.module-header, .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.module-header { margin: 8px 0 20px; }
+.module-header h2, .section-heading h3 { margin-bottom: 4px; }
+.module-header p, .section-heading p { margin-bottom: 0; color: var(--muted); }
+.eyebrow { color: var(--accent) !important; font-size: .78rem; font-weight: 700; letter-spacing: .12em; }
+.panel, .summary-card { border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.panel { margin: 16px 0; padding: clamp(14px, 2.5vw, 24px); }
+.panel h3 { margin-bottom: 16px; }
+.summary-card { min-width: 180px; padding: 14px 18px; }
+.summary-card span, .summary-card strong { display: block; }
+.summary-card span { color: var(--muted); font-size: .88rem; }
+.summary-card strong { margin-top: 4px; color: var(--accent); font-size: 1.45rem; }
+.responsive-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.field { display: grid; align-content: start; gap: 6px; color: #dce3ea; font-size: .92rem; }
+.field-wide { grid-column: 1 / -1; }
+.form-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.primary-button { border-color: #328b68; background: #176342; }
+.filter-row { display: flex; align-items: end; gap: 8px; flex-wrap: wrap; }
+.filter-row label { display: grid; gap: 4px; color: var(--muted); font-size: .82rem; }
+.table-scroll { width: 100%; overflow-x: auto; }
+.data-table { width: 100%; min-width: 760px; border-collapse: collapse; }
+.data-table th, .data-table td { padding: 11px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.data-table th { color: var(--muted); font-size: .82rem; font-weight: 600; }
+.data-table td { overflow-wrap: anywhere; }
+.data-table .numeric { text-align: right; white-space: nowrap; }
+.empty-state { padding: 20px 0; color: var(--muted); text-align: center; }
+.notice-card { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 14px 0; padding: 14px 16px; border: 1px solid #8a743e; border-radius: 10px; background: #302a1b; color: #f4e6bd; }
+.notice-card span { color: #e1d4b1; }
+#gastoStatus { color: var(--muted); }
+
+@media (max-width: 760px) {
+  .responsive-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .module-header, .section-heading { align-items: stretch; flex-direction: column; }
+  .summary-card { width: 100%; }
+  .filter-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filter-row button { min-height: 42px; }
+}
+@media (max-width: 480px) {
+  main { padding-right: 12px; padding-left: 12px; }
+  .responsive-form, .filter-row { grid-template-columns: 1fr; }
+  .field-wide { grid-column: auto; }
+  #info { padding-right: 0; padding-top: 22px; }
+  #notificaciones { top: 6px; right: 8px; }
+  #tabs button { flex: 1 1 calc(50% - 8px); }
+}
