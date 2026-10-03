@@ -19,12 +19,21 @@
       <button class="primary-button" type="button" onclick="login()">Iniciar sesión</button>
     </section>
     <section id="app" hidden>
-      <header class="app-header">
-        <div class="app-brand"><h1>Juguería</h1><p>Panel de gestión</p></div>
-        <div class="app-actions"><h2 id="info"></h2><button id="themeToggle" type="button" onclick="alternarTema()" aria-label="Cambiar tema">Tema</button><button type="button" onclick="verPerfil()">Mi perfil</button><button type="button" onclick="logout()">Cerrar sesión</button></div>
-      </header>
-      <nav id="tabs" aria-label="Módulos"></nav>
-      <section id="contenido" aria-live="polite"></section>
+      <div class="workspace">
+        <aside class="sidebar" id="sidebar">
+          <div class="app-brand"><span class="brand-mark" aria-hidden="true">J</span><div><h1>Juguería</h1><p>Gestión del negocio</p></div></div>
+          <nav id="tabs" aria-label="Navegación principal"></nav>
+          <div class="sidebar-footer"><span class="online-dot"></span> Sistema conectado</div>
+        </aside>
+        <div class="workspace-main">
+          <header class="app-header">
+            <button id="menuToggle" class="icon-button menu-toggle" type="button" onclick="alternarMenu()" aria-label="Contraer menú">☰</button>
+            <div class="header-title"><span class="eyebrow">Espacio de trabajo</span><h2 id="pageTitle">Resumen</h2></div>
+            <div class="app-actions"><h3 id="info"></h3><button id="themeToggle" type="button" onclick="alternarTema()" aria-label="Cambiar tema">Modo oscuro</button><button type="button" onclick="verPerfil()">Mi perfil</button><button class="logout-button" type="button" onclick="logout()">Cerrar sesión</button></div>
+          </header>
+          <section id="contenido" aria-live="polite"></section>
+        </div>
+      </div>
     </section>
   </main>
   <aside id="notificaciones">

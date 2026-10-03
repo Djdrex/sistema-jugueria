@@ -1,8 +1,8 @@
 function verBarra(){
 
   document.getElementById("contenido").innerHTML = 
-  "<h3>Barra</h3>" +
-  "<div id='lista' style='height:400px; overflow-y:auto; border:1px solid white; padding:10px;'></div>";
+  "<div class='module-header'><div><p class='eyebrow'>Operaciones</p><h2>Barra</h2><p>Cola de preparación de pedidos.</p></div><label>Historial cancelado <input id='mostrarCanceladosBarra' type='checkbox' onchange='cargarPedidos()'></label></div>" +
+  "<div id='lista' class='panel' style='height:min(65vh,700px); overflow-y:auto;'></div>";
 
   cargarPedidos();
 }
@@ -22,8 +22,8 @@ async function cargarPedidos(){
   if(!cont) return;
   if(!res.ok || !Array.isArray(data)) { cont.textContent = data.error || "No se pudieron cargar los pedidos"; return; }
 
-  const nuevosPedidos =
-    data.length > pedidosPrevios.length;
+  const operativos = data.filter(p => p.estado !== "cancelado");
+  const nuevosPedidos = operativos.length > pedidosPrevios.length;
 
   const scrollPos = cont.scrollTop;
 
@@ -34,21 +34,23 @@ async function cargarPedidos(){
 
   data.forEach(p => {
 
-    if(p.estado === "entregado") return;
+    const mostrarCancelados = document.getElementById("mostrarCanceladosBarra")?.checked;
+    if(p.estado === "cancelado" && !mostrarCancelados || p.estado === "entregado" && p.estado !== "cancelado") return;
 
-    let color = "#300";
+    let color = "var(--surface-soft)";
 
     if(p.estado === "preparando"){
-      color = "#663300";
+      color = "var(--surface-soft)";
     }
 
     if(p.estado === "listo"){
-      color = "#003300";
+      color = "var(--accent-soft)";
     }
 
     const div = document.createElement("div");
 
     div.style.background = color;
+    div.style.border = "1px solid var(--border)";
 
     div.style.padding = "10px";
 
@@ -57,7 +59,7 @@ async function cargarPedidos(){
     div.style.borderRadius = "8px";
 
     let html =
-      "<b>Mesa " + escapeHtml(p.mesa) + "</b><br>";
+      "<b>Mesa " + escapeHtml(p.mesa) + "</b> · " + escapeHtml(p.estado) + "<br>";
 
     html +=
       "<b>Total: S/ " + Number(p.total).toFixed(2) + "</b><br>";
@@ -164,7 +166,7 @@ async function cargarPedidos(){
 
   }
 
-  pedidosPrevios = data;
+  pedidosPrevios = operativos;
 }
 
 async function cambiarEstado(id,estado,boton){

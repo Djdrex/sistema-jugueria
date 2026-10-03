@@ -17,6 +17,7 @@ module.exports = io => {
     const filtro = {};
     if (estado && ![...ESTADOS, "cancelado"].includes(estado)) return res.status(400).json({ error: "Estado de pedido inválido" });
     if (estado) filtro.estado = estado;
+    else if (req.user.rol === "mesero") filtro.estado = { $in: ["entregado"] };
     if (Boolean(desde) !== Boolean(hasta)) return res.status(400).json({ error: "Indica ambas fechas del período" });
     if (desde && hasta) {
       const validaFecha = value => /^\\d{4}-\\d{2}-\\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T12:00:00Z`)) && new Date(`${value}T12:00:00Z`).toISOString().slice(0, 10) === value;

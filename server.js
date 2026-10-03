@@ -66,7 +66,7 @@ app.use("/notificaciones", notificacionesRoutes(io));
 app.use("/trabajadores", trabajadoresRoutes);
 app.use("/gastos", gastosRoutes);
 app.use("/pagos-personal", pagosPersonalRoutes());
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, "public"), { etag: true, lastModified: true, maxAge: 0 }));
 
 // DB
 
@@ -79,6 +79,8 @@ const Pedido = require("./models/Pedido");
 const Caja = require("./models/Caja");
 const Notificacion = require("./models/Notificacion");
 const Gasto = require("./models/Gasto");
+const Categoria = require("./models/Categoria");
+const MovimientoInventario = require("./models/MovimientoInventario");
 
 async function registrarActividad(usuario, accion, detalle){
 
@@ -198,16 +200,13 @@ app.get("/reporte", auth, soloAdmin, async (req, res) => {
 
   let total = 0;
 
-  pedidos.forEach(p => {
-    if (p.pagado) {
-      total += p.total;
-    }
-  });
+  pedidos.forEach(p => { total += Number(p.totalPagado) || (p.pagado ? Number(p.total) || 0 : 0); });
 
   res.json({
   total,
   cantidad: pedidos.length,
   pedidos
+});
 });
 
 app.get("/dashboard", auth, soloAdmin, async (req, res) => {
@@ -243,7 +242,56 @@ app.get("/dashboard", auth, soloAdmin, async (req, res) => {
   });
 });
 
+app.get("/configuracion", auth, soloAdminPrincipal, async (_req, res) => {
+  const config = await mongoose.connection.collection("configuracion").findOne({ _id: "negocio" });
+  return res.json(config || { nombreComercial: "Juguería", moneda: "PEN", zonaHoraria: "America/Lima", direccion: "", contacto: "", horario: "", logoUrl: "" });
 });
+
+app.put("/configuracion", auth, soloAdminPrincipal, async (req, res) => {
+  const allowed = ["nombreComercial", "nombreLegal", "direccion", "contacto", "horario", "logoUrl"];
+  if (Object.keys(req.body).some(key => !allowed.includes(key))) return res.status(400).json({ error: "Campo de configuración no permitido" });
+  const clean = {};
+  for (const key of allowed) if (req.body[key] !== undefined) {
+    if (typeof req.body[key] !== "string" || req.body[key].length > (key === "logoUrl" ? 1000 : 200)) return res.status(400).json({ error: `Valor inválido para ${key}` });
+    clean[key] = req.body[key].trim();
+  }
+  const result = await mongoose.connection.collection("configuracion").findOneAndUpdate({ _id: "negocio" }, { $set: { ...clean, actualizadoPor: req.user.username, actualizadoEn: new Date() }, $setOnInsert: { moneda: "PEN", zonaHoraria: "America/Lima" } }, { upsert: true, returnDocument: "after" });
+  await Actividad.create({ usuario: req.user.username, accion: "CONFIGURACION_NEGOCIO", detalle: `Actualizó configuración: ${Object.keys(clean).join(", ")}` });
+  return res.json(result);
+});
+
+app.get("/sedes", auth, soloAdminPrincipal, async (_req, res) => {
+  return res.json(await mongoose.connection.collection("sedes").find().sort({ nombre: 1 }).toArray());
+});
+
+app.post("/sedes", auth, soloAdminPrincipal, async (req, res) => {
+  const nombre = typeof req.body.nombre === "string" ? req.body.nombre.trim() : "";
+  if (!nombre || nombre.length > 120 || typeof req.body.direccion === "string" && req.body.direccion.length > 200) return res.status(400).json({ error: "Nombre o dirección de sede inválidos" });
+  const row = { nombre, direccion: typeof req.body.direccion === "string" ? req.body.direccion.trim() : "", activa: true, creadaPor: req.user.username, creadaEn: new Date() };
+  try { const result = await mongoose.connection.collection("sedes").insertOne(row); await Actividad.create({ usuario:req.user.username, accion:"SEDE_CREADA", detalle:`Creó sede ${nombre}` }); return res.status(201).json({ ...row, _id: result.insertedId }); }
+  catch (error) { if (error.code === 11000) return res.status(409).json({ error:"La sede ya existe" }); throw error; }
+});
+
+app.put("/sedes/:id", auth, soloAdminPrincipal, async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error:"Identificador de sede inválido" });
+  const fields = {};
+  if (req.body.nombre !== undefined) { if (typeof req.body.nombre !== "string" || !req.body.nombre.trim() || req.body.nombre.length > 120) return res.status(400).json({ error:"Nombre inválido" }); fields.nombre = req.body.nombre.trim(); }
+  if (req.body.direccion !== undefined) { if (typeof req.body.direccion !== "string" || req.body.direccion.length > 200) return res.status(400).json({ error:"Dirección inválida" }); fields.direccion = req.body.direccion.trim(); }
+  if (req.body.activa !== undefined) { if (typeof req.body.activa !== "boolean") return res.status(400).json({ error:"Estado inválido" }); fields.activa = req.body.activa; }
+  const result = await mongoose.connection.collection("sedes").findOneAndUpdate({ _id:new mongoose.Types.ObjectId(req.params.id) }, { $set:{ ...fields, actualizadoPor:req.user.username, actualizadoEn:new Date() } }, { returnDocument:"after" });
+  if (!result) return res.sendStatus(404);
+  await Actividad.create({ usuario:req.user.username, accion:"SEDE_ACTUALIZADA", detalle:`Actualizó sede ${result.nombre}` });
+  return res.json(result);
+});
+
+app.post("/reinicio/preview", auth, soloAdminPrincipal, async (req, res) => {
+  const actual = await Usuario.findById(req.user.id).select("password username");
+  if (!actual || typeof req.body.password !== "string" || !(await require("bcrypt").compare(req.body.password, actual.password))) return res.status(401).json({ error:"Contraseña actual incorrecta" });
+  const conteos = await Promise.all([Pedido.countDocuments(), Gasto.countDocuments(), require("./models/PagoTrabajador").countDocuments(), MovimientoInventario.countDocuments(), require("./models/Asistencia").countDocuments(), Notificacion.countDocuments()]);
+  return res.json({ backupDisponible:false, colecciones:["pedidos", "gastos", "pagos de personal", "movimientos de inventario", "asistencias", "notificaciones"].map((nombre, i) => ({ nombre, registros:conteos[i] })), bloqueado:"No se configuró un destino verificable de respaldo. El reinicio no está habilitado." });
+});
+
+app.post("/reinicio", auth, soloAdminPrincipal, (_req, res) => res.status(503).json({ error:"Reinicio bloqueado: configura y verifica un destino de respaldo antes de habilitar borrados." }));
 
 
 

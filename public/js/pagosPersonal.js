@@ -106,3 +106,20 @@ async function cargarPagosPersonal(){
 }
 
 window.verPagosPersonal = verPagosPersonal;
+
+window.verMisPagos = function(){
+  document.getElementById("contenido").innerHTML = `<div class="module-header"><div><p class="eyebrow">Personal</p><h2>Mis pagos</h2><p>Consulta únicamente los pagos registrados para tu usuario.</p></div></div><section class="panel"><div id="misPagosResumen" class="summary-grid"></div></section><section class="panel"><div class="filter-row"><label>Desde<input type="date" id="misPagosDesde"></label><label>Hasta<input type="date" id="misPagosHasta"></label><button type="button" onclick="cargarMisPagos()">Filtrar</button></div><div class="table-scroll"><table class="data-table"><thead><tr><th>Fecha</th><th>Monto registrado</th><th>Método</th><th>Detalle</th></tr></thead><tbody id="misPagosLista"></tbody></table></div><p id="misPagosVacio" class="empty-state" hidden>No hay pagos registrados en este periodo.</p></section>`;
+  cargarMisPagos();
+};
+window.cargarMisPagos = async function(){
+  const params = new URLSearchParams(), desde = document.getElementById("misPagosDesde")?.value, hasta = document.getElementById("misPagosHasta")?.value;
+  if(Boolean(desde) !== Boolean(hasta) || desde && desde > hasta) return alert("Selecciona un periodo válido.");
+  if(desde){ params.set("desde", desde); params.set("hasta", hasta); }
+  const res = await fetch(`/pagos-personal/mios?${params}`, { headers:{ Authorization:token } }), data = await res.json();
+  const resumen = document.getElementById("misPagosResumen"), lista = document.getElementById("misPagosLista"); if(!lista) return;
+  if(!res.ok){ resumen.textContent = data.error || "No se pudo cargar tu información."; return; }
+  const total = data.pagos.reduce((sum, pago) => sum + Number(pago.monto || 0), 0);
+  resumen.replaceChildren(...[["Pagos registrados", `S/ ${total.toFixed(2)}`], ["Acuerdo diario registrado", `S/ ${Number(data.trabajador.remuneracionDiaria || 0).toFixed(2)}`], ["Modalidad", data.trabajador.modalidad], ["Transporte diario registrado", `S/ ${Number(data.trabajador.transporteDiario || 0).toFixed(2)}`]].map(([label, value]) => { const card=document.createElement("article");card.className="summary-card";const span=document.createElement("span");span.textContent=label;const strong=document.createElement("strong");strong.textContent=value;card.append(span,strong);return card; }));
+  lista.replaceChildren(); data.pagos.forEach(pago => { const tr=document.createElement("tr"); [new Date(pago.fecha).toLocaleDateString("es-PE", { timeZone:"America/Lima" }), `S/ ${Number(pago.monto).toFixed(2)}`, pago.metodoPago, pago.nota || "—"].forEach(value => {const td=document.createElement("td");td.textContent=value;tr.appendChild(td);});lista.appendChild(tr); });
+  document.getElementById("misPagosVacio").hidden = data.pagos.length > 0;
+};

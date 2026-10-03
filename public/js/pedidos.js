@@ -16,7 +16,7 @@ function verPedidos(){
 
   "<button onclick='enviarPedido()'>Enviar Pedido</button>" +
 
-  "<hr><h3>💰 Cobrar Pedidos</h3>" +
+  "<hr><h3>Pedidos y cobros</h3><div class='filter-row'><label>Estado<select id='filtroEstadoPedido' onchange='cargarPedidosMesero()'><option value=''>Operativos</option><option value='en_espera'>En espera</option><option value='preparando'>Preparando</option><option value='listo'>Listos</option><option value='entregado'>Entregados</option><option value='cancelado'>Cancelados</option></select></label><label>Desde<input id='filtroPedidoDesde' type='date' onchange='cargarPedidosMesero()'></label><label>Hasta<input id='filtroPedidoHasta' type='date' onchange='cargarPedidosMesero()'></label><label>Método de pago<select id='filtroPedidoMetodo' onchange='cargarPedidosMesero()'><option value=''>Todos</option><option value='efectivo'>Efectivo</option><option value='yape'>Yape</option></select></label></div>" +
   "<div id='listaCobros'></div>";
 
   cargarPedidosMesero();
@@ -221,8 +221,12 @@ async function enviarPedido(){
 }
 
 async function cargarPedidosMesero(){
-
-  const res = await fetch("/pedidos", {
+  const params = new URLSearchParams();
+  const estado = document.getElementById("filtroEstadoPedido")?.value;
+  const desde = document.getElementById("filtroPedidoDesde")?.value, hasta = document.getElementById("filtroPedidoHasta")?.value;
+  const metodo = document.getElementById("filtroPedidoMetodo")?.value;
+  if(estado) params.set("estado", estado); if(desde) params.set("desde", desde); if(hasta) params.set("hasta", hasta); if(metodo) params.set("metodo", metodo);
+  const res = await fetch(`/pedidos?${params}`, {
     headers:{ "Authorization":token }
   });
   const data = await res.json();
@@ -235,14 +239,16 @@ async function cargarPedidosMesero(){
   data.forEach(p => {
 
     // 🔥 SOLO PEDIDOS ENTREGADOS Y NO PAGADOS
-    if(p.estado !== "entregado" || p.pagado) return;
+    const estadoFiltro = document.getElementById("filtroEstadoPedido")?.value;
+    if(estadoFiltro && p.estado !== estadoFiltro) return;
+    if(!estadoFiltro && (p.estado === "entregado" && p.pagado)) return;
 
     const div = document.createElement("div");
     div.style.border = "1px solid white";
     div.style.margin = "5px";
     div.style.padding = "10px";
 
-    let html = "<b>Mesa " + escapeHtml(p.mesa) + "</b><br>";
+    let html = "<b>Mesa " + escapeHtml(p.mesa) + "</b><br>Estado: " + escapeHtml(p.estado) + "<br>";
     html += "Total: S/" + Number(p.total).toFixed(2) + "<br><br>";
 
     p.items.forEach(i => {
@@ -251,11 +257,7 @@ async function cargarPedidosMesero(){
 
     div.innerHTML = html;
 
-    const btn = document.createElement("button");
-    btn.innerText = "💰 Cobrar";
-    btn.onclick = () => cobrarPedido(p._id, p);
-
-    div.appendChild(btn);
+    if(p.estado === "entregado" && !p.pagado){ const btn = document.createElement("button"); btn.innerText = "Cobrar"; btn.onclick = () => cobrarPedido(p._id, p); div.appendChild(btn); }
 
     cont.appendChild(div);
   });

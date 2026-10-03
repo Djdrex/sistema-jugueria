@@ -11,6 +11,18 @@ const inicioLima = fecha => new Date(`${fecha}T00:00:00-05:00`);
 module.exports = () => {
   const router = express.Router();
 
+  router.get("/mios", auth, async (req, res) => {
+    if (!["mesero", "barra"].includes(req.user.rol)) return res.status(403).json({ error: "Esta vista es exclusiva para trabajadores" });
+    const usuario = await Usuario.findById(req.user.id).select("username pagoDiario modalidadPago transporteDiario");
+    if (!usuario) return res.sendStatus(404);
+    const desde = req.query.desde, hasta = req.query.hasta;
+    if (Boolean(desde) !== Boolean(hasta) || desde && (!fechaValida(desde) || !fechaValida(hasta) || desde > hasta)) return res.status(400).json({ error: "Rango de fechas inválido" });
+    const filtro = { trabajador: usuario._id };
+    if (desde) filtro.fecha = { $gte: inicioLima(desde), $lt: new Date(inicioLima(hasta).getTime() + 86400000) };
+    const pagos = await PagoTrabajador.find(filtro).sort({ fecha: -1 }).limit(500).select("monto metodoPago fecha nota registradoPor");
+    return res.json({ trabajador: { username: usuario.username, remuneracionDiaria: usuario.pagoDiario || 0, modalidad: usuario.modalidadPago || "no configurada", transporteDiario: usuario.transporteDiario || 0 }, pagos });
+  });
+
   router.get("/", auth, soloAdmin, async (req, res) => {
     const { trabajador, desde, hasta } = req.query;
     if (trabajador && !esId(trabajador)) return res.status(400).json({ error: "Identificador de trabajador inválido" });

@@ -31,6 +31,7 @@ function actualizarBotonTema(){
   const oscuro = document.documentElement.dataset.theme === "dark";
   boton.textContent = oscuro ? "Modo claro" : "Modo oscuro";
   boton.setAttribute("aria-pressed", String(oscuro));
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", oscuro ? "#111714" : "#f5f7f5");
 }
 function alternarTema(){
   const tema = document.documentElement.dataset.theme === "dark" ? "light" : "dark";

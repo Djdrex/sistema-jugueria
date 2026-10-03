@@ -2,6 +2,17 @@
 
 Este inventario refleja las rutas implementadas en el código actual. No implica validación contra la base de producción ni conformidad laboral, contable o tributaria.
 
+## Actualización de interfaz y módulos
+
+- La navegación del frontend se organiza en General, Operaciones, Administración y Configuración, con opciones filtradas por rol y principal; el menú es colapsable y la preferencia claro/oscuro persiste en el navegador.
+- El dashboard consulta un endpoint dedicado y muestra importes cobrados, pedidos, gastos registrados y alertas de stock con datos existentes.
+- El catálogo admite campos opcionales de costo, unidad y stock mínimo; las categorías tienen colección propia, se pueden crear/editar/desactivar, y los cambios de stock guardan movimientos y actividad.
+- Pedidos listan estados/filtros, conservan cancelados en consulta explícita y rechazan transiciones desde cancelado. No se habilitó anulación porque falta definir reversión coordinada de stock/caja.
+- Notificaciones admiten filtros y lectura individual. Los trabajadores pueden consultar únicamente sus pagos internos registrados; el sistema aún no calcula remuneración devengada ni saldo laboral.
+- Se añadieron directorio de sedes, configuración de identidad básica y exportación CSV. Estos cambios no migran registros existentes ni significan que los módulos operativos ya estén aislados por sede.
+- El reinicio tiene vista previa con reautenticación, pero su ejecución continúa bloqueada mientras no exista un destino verificable de respaldo.
+- Los recursos estáticos se sirven con revalidación de caché para reflejar actualizaciones al abrir la aplicación.
+
 | Módulo | Rutas principales | Permisos | Estado y límites |
 |---|---|---|---|
 | Sesión y usuarios | `POST /usuarios/login`, `POST/GET /usuarios`, `PUT /usuarios/:id/rol`, `PUT /usuarios/:id/activo`, `PUT /usuarios/:id/password`, `PUT /usuarios/cambiar-password`, `POST /usuarios/mi-estado` | JWT; administración según rol; rol/contraseña de otros usuarios restringidos al admin principal | Roles solo `admin`, `mesero`, `barra`. Desactivación conserva historial. Sin sucursales, permisos configurables, restablecimiento por flujo seguro o perfiles personales completos. |
