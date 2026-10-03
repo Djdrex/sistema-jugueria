@@ -3,21 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sistema PRO</title>
+  <meta name="theme-color" content="#f5f7f5">
+  <title>Juguería · Gestión</title>
   <link rel="stylesheet" href="/css/styles.css">
   <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
   <main>
     <section id="loginDiv">
-      <h2>Login</h2>
-      <label>Usuario <input id="user" autocomplete="username"></label><br><br>
-      <label>Contraseña <input id="pass" type="password" autocomplete="current-password"></label><br><br>
-      <button type="button" onclick="login()">Entrar</button>
+      <p class="eyebrow">Gestión de juguería</p>
+      <h2>Bienvenido</h2>
+      <p style="color:var(--muted)">Inicia sesión para continuar al espacio de trabajo.</p>
+      <label>Usuario <input id="user" autocomplete="username"></label>
+      <label>Contraseña <input id="pass" type="password" autocomplete="current-password"></label>
+      <button class="primary-button" type="button" onclick="login()">Iniciar sesión</button>
     </section>
     <section id="app" hidden>
-      <h2 id="info"></h2>
-      <button type="button" onclick="logout()">Cerrar sesión</button>
+      <header class="app-header">
+        <div class="app-brand"><h1>Juguería</h1><p>Panel de gestión</p></div>
+        <div class="app-actions"><h2 id="info"></h2><button id="themeToggle" type="button" onclick="alternarTema()" aria-label="Cambiar tema">Tema</button><button type="button" onclick="verPerfil()">Mi perfil</button><button type="button" onclick="logout()">Cerrar sesión</button></div>
+      </header>
       <nav id="tabs" aria-label="Módulos"></nav>
       <section id="contenido" aria-live="polite"></section>
     </section>

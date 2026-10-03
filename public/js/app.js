@@ -19,6 +19,28 @@ let pedidosPrevios = [];
 let notificaciones = [];
 let productosCache = [];
 
+function inicializarTema(){
+  const guardado = localStorage.getItem("jugueria-theme");
+  const tema = guardado === "light" || guardado === "dark" ? guardado : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  document.documentElement.dataset.theme = tema;
+  actualizarBotonTema();
+}
+function actualizarBotonTema(){
+  const boton = document.getElementById("themeToggle");
+  if(!boton) return;
+  const oscuro = document.documentElement.dataset.theme === "dark";
+  boton.textContent = oscuro ? "Modo claro" : "Modo oscuro";
+  boton.setAttribute("aria-pressed", String(oscuro));
+}
+function alternarTema(){
+  const tema = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = tema;
+  localStorage.setItem("jugueria-theme", tema);
+  actualizarBotonTema();
+}
+inicializarTema();
+window.alternarTema = alternarTema;
+
 function escapeHtml(value){
   return String(value ?? "").replace(/[&<>"']/g, char => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", "\"":"&quot;", "'":"&#39;" }[char]));
 }

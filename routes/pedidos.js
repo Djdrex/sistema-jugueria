@@ -12,13 +12,32 @@ const ESTADOS = ["en_espera", "preparando", "listo", "entregado"];
 const cents = toCents;
 
 module.exports = io => {
-  router.get("/", auth, async (_req, res) => res.json(await Pedido.find().sort({ fecha: -1 }).limit(500)));
+  router.get("/", auth, async (req, res) => {
+    const { estado, desde, hasta, metodo } = req.query;
+    const filtro = {};
+    if (estado && ![...ESTADOS, "cancelado"].includes(estado)) return res.status(400).json({ error: "Estado de pedido inválido" });
+    if (estado) filtro.estado = estado;
+    if (Boolean(desde) !== Boolean(hasta)) return res.status(400).json({ error: "Indica ambas fechas del período" });
+    if (desde && hasta) {
+      const validaFecha = value => /^\\d{4}-\\d{2}-\\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T12:00:00Z`)) && new Date(`${value}T12:00:00Z`).toISOString().slice(0, 10) === value;
+      if (!validaFecha(desde) || !validaFecha(hasta) || desde > hasta) return res.status(400).json({ error: "Rango de fechas inválido" });
+      const inicio = new Date(`${desde}T00:00:00-05:00`), fin = new Date(`${hasta}T00:00:00-05:00`);
+      fin.setTime(fin.getTime() + 86400000);
+      filtro.fecha = { $gte: inicio, $lt: fin };
+    }
+    if (metodo && !["efectivo", "yape"].includes(metodo)) return res.status(400).json({ error: "Método de pago inválido" });
+    if (metodo) filtro["pagos.metodo"] = metodo;
+    if (!estado) filtro.estado = { $ne: "cancelado" };
+    const pedidos = await Pedido.find(filtro).sort({ fecha: -1 }).limit(500);
+    return res.json(pedidos);
+  });
 
   router.put("/:id", auth, soloBarra, async (req, res) => {
     if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: "Identificador inválido" });
     if (!ESTADOS.includes(req.body.estado)) return res.status(400).json({ error: "Estado de pedido inválido" });
     const pedido = await Pedido.findById(req.params.id);
     if (!pedido) return res.sendStatus(404);
+    if (pedido.estado === "cancelado") return res.status(409).json({ error: "Un pedido cancelado no puede avanzar" });
     const transiciones = { en_espera: ["preparando"], preparando: ["listo"], listo: ["preparando", "entregado"], entregado: [] };
     if (pedido.estado !== req.body.estado && !transiciones[pedido.estado]?.includes(req.body.estado)) {
       return res.status(409).json({ error: "Transición de estado no permitida" });

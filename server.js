@@ -78,6 +78,7 @@ const Producto = require("./models/Producto");
 const Pedido = require("./models/Pedido");
 const Caja = require("./models/Caja");
 const Notificacion = require("./models/Notificacion");
+const Gasto = require("./models/Gasto");
 
 async function registrarActividad(usuario, accion, detalle){
 
@@ -207,6 +208,39 @@ app.get("/reporte", auth, soloAdmin, async (req, res) => {
   total,
   cantidad: pedidos.length,
   pedidos
+});
+
+app.get("/dashboard", auth, soloAdmin, async (req, res) => {
+  const ahora = new Date();
+  const limaAhora = new Date(ahora.toLocaleString("en-US", { timeZone: "America/Lima" }));
+  const hoy = new Date(Date.UTC(limaAhora.getFullYear(), limaAhora.getMonth(), limaAhora.getDate(), 5));
+  const inicioSemana = new Date(hoy);
+  inicioSemana.setUTCDate(inicioSemana.getUTCDate() - ((inicioSemana.getUTCDay() + 6) % 7));
+  const inicioMes = new Date(Date.UTC(limaAhora.getFullYear(), limaAhora.getMonth(), 1, 5));
+  const inicioDiaSiguiente = new Date(hoy.getTime() + 86400000);
+  const [pedidosDia, pedidosSemana, pedidosMes, estados, gastosMes, stock] = await Promise.all([
+    Pedido.find({ fecha: { $gte: hoy, $lt: inicioDiaSiguiente }, estado: { $ne: "cancelado" } }).select("total totalPagado pagado estado items fecha"),
+    Pedido.find({ fecha: { $gte: inicioSemana, $lt: inicioDiaSiguiente }, estado: { $ne: "cancelado" } }).select("total totalPagado pagado estado"),
+    Pedido.find({ fecha: { $gte: inicioMes, $lt: inicioDiaSiguiente }, estado: { $ne: "cancelado" } }).select("total totalPagado pagado estado"),
+    Pedido.aggregate([{ $match: { fecha: { $gte: hoy, $lt: inicioDiaSiguiente } } }, { $group: { _id: "$estado", cantidad: { $sum: 1 } } }]),
+    Gasto.aggregate([{ $match: { fecha: { $gte: inicioMes, $lt: inicioDiaSiguiente } } }, { $group: { _id: null, total: { $sum: "$monto" } } }]),
+    Producto.find().select("nombre stock").sort({ stock: 1 }).limit(100)
+  ]);
+  const agregados = pedidos => ({
+    ventas: Math.round(pedidos.reduce((sum, pedido) => sum + (Number(pedido.totalPagado) || (pedido.pagado ? Number(pedido.total) || 0 : 0)), 0) * 100) / 100,
+    pedidos: pedidos.length,
+    pendientesPago: pedidos.filter(p => !p.pagado).length
+  });
+  const productos = {};
+  for (const pedido of pedidosDia.filter(p => p.estado === "entregado")) for (const item of pedido.items || []) productos[item.producto] = (productos[item.producto] || 0) + 1;
+  return res.json({
+    dia: agregados(pedidosDia), semana: agregados(pedidosSemana), mes: agregados(pedidosMes),
+    estados: Object.fromEntries(estados.map(item => [item._id || "sin_estado", item.cantidad])),
+    gastosMes: Math.round((gastosMes[0]?.total || 0) * 100) / 100,
+    bajoStock: stock.filter(p => Number.isFinite(p.stock) && p.stock <= 5 && p.stock > 0).map(p => ({ nombre: p.nombre, stock: p.stock })),
+    agotados: stock.filter(p => p.stock === 0).map(p => ({ nombre: p.nombre, stock: p.stock })),
+    topProductos: Object.entries(productos).sort((a, b) => b[1] - a[1]).slice(0, 5)
+  });
 });
 
 });
