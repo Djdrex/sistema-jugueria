@@ -13,7 +13,7 @@ const seccionesNav = [
   ]},
   { grupo:"Administración", items:[
     { texto:"Informes", icono:"▥", click:"verInformes()", roles:["admin"] },
-    { texto:"Historial financiero", icono:"H", click:"verHistorialFinanciero()", roles:["admin"] },
+    { texto:"Historial financiero", icono:"$", click:"verHistorialFinanciero()", roles:["admin"] },
     { texto:"Trabajadores", icono:"♙", click:"verTrabajadores()", roles:["admin"] },
     { texto:"Pagos al personal", icono:"＄", click:"verPagosPersonal()", roles:["admin"] },
     { texto:"Mis pagos", icono:"＄", click:"verMisPagos()", roles:["mesero","barra"] },
@@ -37,6 +37,12 @@ function cargarTabs(){
     const disponibles = grupo.items.filter(item => item.roles.includes(rol) || item.roles.includes("adminPrincipal") && esAdminPrincipal());
     if(!disponibles.length) return;
     const titulo = document.createElement("p"); titulo.className = "nav-group-title"; titulo.textContent = grupo.grupo; nav.appendChild(titulo);
+    if(grupo.grupo === "Administración" && rol === "admin") {
+      const button = document.createElement("button"); button.type = "button"; button.className = "nav-item nav-history-shortcut"; button.dataset.title = "Historial financiero";
+      const icon = document.createElement("span"); icon.className = "nav-icon"; icon.setAttribute("aria-hidden", "true"); icon.textContent = "$";
+      const label = document.createElement("span"); label.className = "nav-label"; label.textContent = "Historial financiero";
+      button.append(icon, label); button.addEventListener("click", () => { document.querySelectorAll(".nav-item").forEach(el => el.removeAttribute("aria-current")); button.setAttribute("aria-current", "page"); document.getElementById("pageTitle").textContent = "Historial financiero"; verHistorialFinanciero(); }); nav.appendChild(button);
+    }
     disponibles.forEach(item => {
       const button = document.createElement("button"); button.type = "button"; button.className = "nav-item"; button.dataset.title = item.texto;
       const icon = document.createElement("span"); icon.className = "nav-icon"; icon.setAttribute("aria-hidden", "true"); icon.textContent = item.icono;
