@@ -220,7 +220,7 @@ app.get("/dashboard", auth, soloAdmin, async (req, res) => {
   inicioSemana.setUTCDate(inicioSemana.getUTCDate() - ((inicioSemana.getUTCDay() + 6) % 7));
   const inicioMes = new Date(Date.UTC(limaAhora.getFullYear(), limaAhora.getMonth(), 1, 5));
   const inicioDiaSiguiente = new Date(hoy.getTime() + 86400000);
-  const [pedidosDia, pedidosSemana, pedidosMes, estados, gastosMes, stock] = await Promise.all([
+  const consultas = await Promise.allSettled([
     Pedido.find({ fecha: { $gte: hoy, $lt: inicioDiaSiguiente }, estado: { $ne: "cancelado" } }).select("total totalPagado pagado estado items fecha"),
     Pedido.find({ fecha: { $gte: inicioSemana, $lt: inicioDiaSiguiente }, estado: { $ne: "cancelado" } }).select("total totalPagado pagado estado"),
     Pedido.find({ fecha: { $gte: inicioMes, $lt: inicioDiaSiguiente }, estado: { $ne: "cancelado" } }).select("total totalPagado pagado estado"),
@@ -228,6 +228,10 @@ app.get("/dashboard", auth, soloAdmin, async (req, res) => {
     Gasto.aggregate([{ $match: { fecha: { $gte: inicioMes, $lt: inicioDiaSiguiente } } }, { $group: { _id: null, total: { $sum: "$monto" } } }]),
     Producto.find().select("nombre stock stockMinimo tipo activo").sort({ stock: 1 }).limit(1000)
   ]);
+  const nombresConsultas = ["pedidos de hoy", "pedidos de la semana", "pedidos del mes", "estados", "gastos del mes", "inventario"];
+  const advertencias = consultas.flatMap((resultado, indice) => resultado.status === "rejected" ? [`No se pudieron cargar ${nombresConsultas[indice]}`] : []);
+  const [pedidosDia = [], pedidosSemana = [], pedidosMes = [], estados = [], gastosMes = [], stock = []] = consultas.map(resultado => resultado.status === "fulfilled" ? resultado.value : []);
+  consultas.forEach((resultado, indice) => { if (resultado.status === "rejected") console.error(`Dashboard: error consultando ${nombresConsultas[indice]}:`, resultado.reason?.message); });
   const agregados = pedidos => ({
     ventas: Math.round(pedidos.reduce((sum, pedido) => sum + (Number(pedido.totalPagado) || (pedido.pagado ? Number(pedido.total) || 0 : 0)), 0) * 100) / 100,
     pedidos: pedidos.length,
@@ -236,7 +240,7 @@ app.get("/dashboard", auth, soloAdmin, async (req, res) => {
   const productos = {};
   for (const pedido of pedidosDia.filter(p => p.estado === "entregado")) for (const item of pedido.items || []) productos[item.producto] = (productos[item.producto] || 0) + 1;
   return res.json({
-    dia: agregados(pedidosDia), semana: agregados(pedidosSemana), mes: agregados(pedidosMes),
+    dia: agregados(pedidosDia), semana: agregados(pedidosSemana), mes: agregados(pedidosMes), advertencias,
     estados: Object.fromEntries(estados.map(item => [item._id || "sin_estado", item.cantidad])),
     gastosMes: Math.round((gastosMes[0]?.total || 0) * 100) / 100,
     bajoStock: stock.filter(p => p.activo !== false && Number.isFinite(p.stock) && p.stock <= (p.stockMinimo ?? 5) && p.stock > 0).map(p => ({ nombre: p.nombre, stock: p.stock, minimo:p.stockMinimo ?? 5, tipo:p.tipo })),

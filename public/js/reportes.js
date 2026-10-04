@@ -1,37 +1,105 @@
+Ôªøconst soles = value => `S/ ${Number(value || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+function verDashboard(){
+  document.getElementById("contenido").innerHTML = `<div class="module-header"><div><p class="eyebrow">Resumen operativo</p><h2>Dashboard</h2><p>Indicadores calculados con registros existentes.</p></div><button type="button" onclick="cargarDashboard()">Actualizar</button></div>
+    <div id="dashboardStatus" role="status" class="empty-state">Cargando datos...</div><div id="dashboardCards" class="summary-grid"></div>
+    <div class="panel"><h3>Pedidos de hoy</h3><div id="dashboardEstados" class="summary-grid"></div></div>
+    <div class="panel"><h3>Productos m√°s vendidos hoy</h3><div id="topProductos" class="table-scroll"></div></div>
+    <div class="panel"><h3>Alertas de stock</h3><div id="dashboardStock"></div></div>`;
+  cargarDashboard();
+}
+
+async function cargarDashboard(){
+  const status = document.getElementById("dashboardStatus");
+  if(!status) return;
+  status.textContent = "Cargando datos...";
+  try {
+    const res = await fetch("/dashboard", { headers:{ Authorization:token } });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || "No se pudo cargar el dashboard");
+    const cards = [
+      ["Ventas hoy cobradas", soles(data.dia.ventas), `${data.dia.pedidos} pedidos registrados`],
+      ["Ventas de la semana cobradas", soles(data.semana.ventas), `${data.semana.pedidos} pedidos registrados`],
+      ["Ventas del mes cobradas", soles(data.mes.ventas), `${data.mes.pedidos} pedidos registrados`],
+      ["Gastos del mes", soles(data.gastosMes), "Seg√∫n gastos registrados"],
+      ["Pendientes de pago hoy", data.dia.pendientesPago, "Pedidos no cancelados"],
+      ["Promedio cobrado hoy", data.dia.pedidos ? soles(data.dia.ventas / data.dia.pedidos) : "‚Äî", "Por pedido registrado"]
+    ];
+    const cardBox = document.getElementById("dashboardCards");
+    cardBox.replaceChildren(...cards.map(([label, value, detail]) => { const article = document.createElement("article"); article.className = "summary-card"; const title = document.createElement("span"); title.textContent = label; const amount = document.createElement("strong"); amount.textContent = value; const note = document.createElement("small"); note.textContent = detail; article.append(title, amount, note); return article; }));
+    const estados = document.getElementById("dashboardEstados");
+    const estadoLabels = { en_espera:"En espera", preparando:"Preparando", listo:"Listos", entregado:"Entregados", cancelado:"Cancelados" };
+    const estadoEntries = Object.entries(data.estados || {});
+    estados.replaceChildren(...(estadoEntries.length ? estadoEntries : [["sin_datos", 0]]).map(([estado, cantidad]) => { const item = document.createElement("article"); item.className = "summary-card"; const label = document.createElement("span"); label.textContent = estadoLabels[estado] || estado; const value = document.createElement("strong"); value.textContent = cantidad; item.append(label, value); return item; }));
+    const top = document.getElementById("topProductos");
+    if(!data.topProductos?.length) top.innerHTML = "<p class='empty-state'>A√∫n no hay ventas de productos entregados hoy.</p>";
+    else { const table = document.createElement("table"); table.className = "data-table"; table.innerHTML = "<thead><tr><th>Producto</th><th class='numeric'>Unidades</th></tr></thead>"; const body = document.createElement("tbody"); data.topProductos.forEach(([nombre, cantidad]) => { const row = document.createElement("tr"); const nameCell = document.createElement("td"); nameCell.textContent = nombre; const countCell = document.createElement("td"); countCell.className = "numeric"; countCell.textContent = cantidad; row.append(nameCell, countCell); body.appendChild(row); }); table.appendChild(body); top.replaceChildren(table); }
+    const stock = document.getElementById("dashboardStock");
+    const alertas = [...(data.agotados || []).map(p => ({ ...p, estado:"Agotado" })), ...(data.bajoStock || []).map(p => ({ ...p, estado:"Stock bajo" }))];
+    if(!alertas.length) stock.innerHTML = "<p class='empty-state'>No hay alertas de stock.</p>";
+    else { const table = document.createElement("table"); table.className = "data-table"; table.innerHTML = "<thead><tr><th>Producto</th><th>Estado</th><th class='numeric'>Existencias</th></tr></thead>"; const body = document.createElement("tbody"); alertas.forEach(p => { const row = document.createElement("tr"); [p.nombre, p.estado, p.stock].forEach((value, index) => { const cell = document.createElement("td"); cell.textContent = value; if(index === 2) cell.className = "numeric"; row.appendChild(cell); }); body.appendChild(row); }); table.appendChild(body); stock.replaceChildren(table); }
+    status.textContent = data.advertencias?.length
+      ? `Dashboard parcial: ${data.advertencias.join("; ")}. Revisa los logs del servidor.`
+      : "Actualizado con datos disponibles.";
+  } catch(error) { status.textContent = error.message; }
+}
+
 function verInformes(){
-  document.getElementById("contenido").innerHTML = `<div class="module-header"><div><p class="eyebrow">AdministraciÛn</p><h2>Informes</h2><p>Registra ingresos y consulta ventas, ingresos y tendencias del periodo.</p></div></div>
-    <section class="panel"><h3>Registrar ingreso</h3><p>Registra Yapes pasados, actuales o futuros y adjunta el voucher.</p><form id="ingresoForm" class="responsive-form">
+  document.getElementById("contenido").innerHTML = `<div class="module-header"><div><p class="eyebrow">Administraci√≥n</p><h2>Informes</h2><p>Registra ingresos y consulta ventas cobradas por periodo.</p></div></div>
+    <section class="panel"><h3>Registrar ingreso</h3><p>Registra pagos Yape pasados, actuales o futuros y adjunta el voucher.</p><form id="ingresoForm" class="responsive-form">
       <label class="field">Tipo<select name="tipo"><option value="yape">Pago Yape</option><option value="recibo">Recibo</option><option value="pago">Otro ingreso</option><option value="otro">Otro</option></select></label>
       <label class="field">Fecha<input name="fecha" id="ingresoFecha" type="date" required></label><label class="field">Monto (S/)<input name="monto" type="number" min="0.01" step="0.01" required></label>
-      <label class="field">MÈtodo<select name="metodoPago"><option value="yape">Yape</option><option value="efectivo">Efectivo</option><option value="transferencia">Transferencia</option><option value="tarjeta">Tarjeta</option><option value="otro">Otro</option></select></label><label class="field">CategorÌa<input name="categoria" maxlength="80"></label>
+      <label class="field">M√©todo<select name="metodoPago"><option value="yape">Yape</option><option value="efectivo">Efectivo</option><option value="transferencia">Transferencia</option><option value="tarjeta">Tarjeta</option><option value="otro">Otro</option></select></label><label class="field">Categor√≠a<input name="categoria" maxlength="80"></label>
       <label class="field">Persona o referencia<input name="proveedor" maxlength="160"></label><label class="field field-wide">Concepto<input name="concepto" maxlength="300" required></label>
-      <label class="field field-wide">Voucher (imagen, PDF, Word o Excel; m·ximo 8 MB)<input id="ingresoArchivo" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx"></label>
-      <div class="field-wide form-actions"><button class="primary-button" id="guardarIngreso" type="submit">Registrar ingreso</button><span id="ingresoStatus" role="status"></span></div>
+      <label class="field field-wide">Voucher (imagen, PDF, Word o Excel; m√°ximo 8 MB)<input id="ingresoArchivo" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx"></label>
+      <div class="field-wide form-actions"><button class="primary-button" id="guardarIngreso" type="submit">Registrar ingreso</button><span id="ingresoStatus" role="status" aria-live="polite"></span></div>
     </form></section>
-    <section class="panel"><h3>Informe por periodo</h3><div class="filter-row"><label>Desde<input type="date" id="desde"></label><label>Hasta<input type="date" id="hasta"></label><button class="primary-button" type="button" onclick="generarReporte()">Generar informe</button></div><div id="resultadoReporte"></div><div id="tendenciaInforme"></div></section>`;
-  document.getElementById("ingresoFecha").value=fechaHoyLima();document.getElementById("ingresoForm").addEventListener("submit",registrarIngresoInforme);
+    <section class="panel"><h3>Informe por periodo</h3><div class="filter-row"><label>Desde<input type="date" id="desde"></label><label>Hasta<input type="date" id="hasta"></label><button class="primary-button" type="button" onclick="generarReporte()">Generar informe</button></div><div id="resultadoReporte" aria-live="polite"></div><div id="tendenciaInforme"></div></section>`;
+  document.getElementById("ingresoFecha").value = fechaHoyLima();
+  document.getElementById("ingresoForm").addEventListener("submit", registrarIngresoInforme);
 }
 
 async function registrarIngresoInforme(event){
-  event.preventDefault();const form=event.currentTarget,status=document.getElementById("ingresoStatus"),button=document.getElementById("guardarIngreso"),file=document.getElementById("ingresoArchivo").files[0];if(file&&file.size>8*1024*1024){status.textContent="El archivo supera 8 MB.";return;}
-  const data=Object.fromEntries(new FormData(form));data.clase="ingreso";button.disabled=true;
-  try{const response=await fetch("/historial-financiero",{method:"POST",headers:{Authorization:token,"Content-Type":"application/json"},body:JSON.stringify(data)}),result=await response.json();if(!response.ok)throw new Error(result.error||"No se pudo guardar");
-    if(file){const contenido=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error("No se pudo leer el archivo"));reader.readAsDataURL(file);});const upload=await fetch(`/historial-financiero/${result._id}/archivo`,{method:"POST",headers:{Authorization:token,"Content-Type":"application/json"},body:JSON.stringify({nombre:file.name,tipoMime:file.type,contenido})}),saved=await upload.json();if(!upload.ok)throw new Error(saved.error||"No se pudo adjuntar el voucher");}
-    form.reset();document.getElementById("ingresoFecha").value=fechaHoyLima();status.textContent=file?"Ingreso y voucher registrados.":"Ingreso registrado.";
-  }catch(error){status.textContent=error.message;}finally{button.disabled=false;}
+  event.preventDefault();
+  const form = event.currentTarget, status = document.getElementById("ingresoStatus"), button = document.getElementById("guardarIngreso"), file = document.getElementById("ingresoArchivo").files[0];
+  if(file && file.size > 8 * 1024 * 1024){ status.textContent = "El archivo supera 8 MB."; return; }
+  const data = Object.fromEntries(new FormData(form)); data.clase = "ingreso"; button.disabled = true;
+  try {
+    const response = await fetch("/historial-financiero", { method:"POST", headers:{ Authorization:token, "Content-Type":"application/json" }, body:JSON.stringify(data) }), result = await response.json();
+    if(!response.ok) throw new Error(result.error || "No se pudo guardar el ingreso");
+    if(file){
+      const contenido = await new Promise((resolve,reject)=>{ const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error("No se pudo leer el voucher")); reader.readAsDataURL(file); });
+      const upload = await fetch(`/historial-financiero/${result._id}/archivo`, { method:"POST", headers:{ Authorization:token, "Content-Type":"application/json" }, body:JSON.stringify({ nombre:file.name, tipoMime:file.type, contenido }) }), uploaded = await upload.json();
+      if(!upload.ok) throw new Error(uploaded.error || "El ingreso se guard√≥, pero no el voucher");
+    }
+    form.reset(); document.getElementById("ingresoFecha").value = fechaHoyLima(); status.textContent = file ? "Ingreso y voucher registrados." : "Ingreso registrado.";
+  } catch(error){ status.textContent = error.message; }
+  finally { button.disabled = false; }
 }
 
 async function generarReporte(){
-  const desde=document.getElementById("desde").value,hasta=document.getElementById("hasta").value;
-  if(Boolean(desde)!==Boolean(hasta)||desde&&desde>hasta){alert("Selecciona un rango v·lido.");return;}
-  const params=desde?`?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`:"",res=await fetch(`/reporte${params}`,{headers:{Authorization:token}}),data=await res.json(),cont=document.getElementById("resultadoReporte");if(!cont)return;cont.replaceChildren();if(!res.ok){cont.textContent=data.error||"No se pudo generar el informe.";return;}
-  const hp=new URLSearchParams();if(desde){hp.set("desde",desde);hp.set("hasta",hasta);}const hr=await fetch(`/historial-financiero?${hp}`,{headers:{Authorization:token}}),movimientos=await hr.json();const ingresos=Array.isArray(movimientos)?movimientos.filter(x=>x.clase==="ingreso"&&x.monto!=null):[],totalIngresos=ingresos.reduce((sum,x)=>sum+Number(x.monto),0);
-  const resumen=document.createElement("p");resumen.textContent=`Ventas cobradas: ${soles(data.total)} ∑ Ingresos manuales: ${soles(totalIngresos)} ∑ Ingresos: ${ingresos.length} ∑ Pedidos: ${data.cantidad}`;cont.appendChild(resumen);
-  const tendencia=document.getElementById("tendenciaInforme");if(tendencia)tendencia.textContent=`Tendencia del periodo: ${ingresos.length} ingresos, total ${soles(totalIngresos)}.`;
-  const exportar=document.createElement("button");exportar.type="button";exportar.textContent="Exportar CSV de pedidos";exportar.addEventListener("click",()=>exportarReporteCSV(data.pedidos||[]));cont.appendChild(exportar);
-  const table=document.createElement("table");table.className="data-table";table.innerHTML="<thead><tr><th>Fecha</th><th>Mesa</th><th>Estado</th><th>Pago</th><th class=\"numeric\">Total</th></tr></thead>";const body=document.createElement("tbody");(data.pedidos||[]).forEach(p=>{const row=document.createElement("tr"),pago=Number(p.totalPagado)||(p.pagado?Number(p.total)||0:0);[new Date(p.fecha).toLocaleString("es-PE"),p.mesa,p.estado,pago>=p.total?"Pagado":pago>0?"Parcial":"Pendiente",soles(pago)].forEach((v,i)=>{const td=document.createElement("td");td.textContent=v;if(i===4)td.className="numeric";row.appendChild(td);});body.appendChild(row);});table.appendChild(body);cont.appendChild(table);
+  const desde = document.getElementById("desde").value, hasta = document.getElementById("hasta").value;
+  if(Boolean(desde) !== Boolean(hasta) || desde && desde > hasta){ alert("Selecciona un rango de fechas v√°lido."); return; }
+  const params = desde ? `?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}` : "";
+  const res = await fetch(`/reporte${params}`, { headers:{ Authorization:token } });
+  const data = await res.json(), cont = document.getElementById("resultadoReporte");
+  if(!cont) return;
+  cont.replaceChildren();
+  if(!res.ok){ cont.textContent = data.error || "No se pudo generar el informe."; return; }
+  const historialParams = new URLSearchParams(); if(desde){ historialParams.set("desde", desde); historialParams.set("hasta", hasta); }
+  const historialRes = await fetch(`/historial-financiero?${historialParams}`, { headers:{ Authorization:token } });
+  const movimientos = await historialRes.json();
+  if(!historialRes.ok){ cont.textContent = movimientos.error || "No se pudo cargar el historial de ingresos."; return; }
+  const ingresos = movimientos.filter(item => item.clase === "ingreso" && item.monto != null);
+  const totalIngresos = ingresos.reduce((sum, item) => sum + Number(item.monto), 0);
+  const resumen = document.createElement("p"); resumen.textContent = `Ventas cobradas: ${soles(data.total)} ¬∑ Ingresos manuales: ${soles(totalIngresos)} ¬∑ ${ingresos.length} ingresos ¬∑ ${data.cantidad} pedidos`; cont.appendChild(resumen);
+  const tendencia = document.getElementById("tendenciaInforme"); if(tendencia) tendencia.textContent = `Tendencia del periodo: ${ingresos.length} ingresos manuales por ${soles(totalIngresos)}.`;
+  const exportar = document.createElement("button"); exportar.type="button"; exportar.textContent="Exportar CSV"; exportar.addEventListener("click",()=>exportarReporteCSV(data.pedidos||[])); cont.appendChild(exportar);
+  const table = document.createElement("table"); table.className = "data-table"; table.innerHTML = "<thead><tr><th>Fecha</th><th>Mesa</th><th>Estado</th><th>Pago</th><th class='numeric'>Total</th></tr></thead>";
+  const body = document.createElement("tbody");
+  (data.pedidos || []).forEach(p => { const row = document.createElement("tr"); const pago = Number(p.totalPagado) || (p.pagado ? Number(p.total) || 0 : 0); [new Date(p.fecha).toLocaleString("es-PE"), p.mesa, p.estado, pago >= p.total ? "Pagado" : pago > 0 ? "Parcial" : "Pendiente", soles(pago)].forEach((value, index) => { const cell = document.createElement("td"); cell.textContent = value; if(index === 4) cell.className = "numeric"; row.appendChild(cell); }); body.appendChild(row); });
+  table.appendChild(body); cont.appendChild(table);
 }
-
 
 async function verActividad(){
   document.getElementById("contenido").innerHTML = `<div class="module-header"><div><p class="eyebrow">Seguridad</p><h2>Actividad del sistema</h2><p>Acciones registradas recientemente.</p></div></div><section class="panel"><div id="listaActividad" class="empty-state">Cargando actividad...</div></section>`;
