@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const DocumentoSchema = new mongoose.Schema({
-  tipo: { type: String, enum: ["boleta", "factura", "recibo", "compra", "servicio", "otro"], required: true },
+  tipo: { type: String, enum: ["boleta", "factura", "recibo", "compra", "servicio", "yape", "gasto", "pago", "otro"], required: true },
   serie: String,
   numero: String,
   fecha: { type: Date, required: true },
@@ -12,7 +12,14 @@ const DocumentoSchema = new mongoose.Schema({
   igv: { type: Number, min: 0 },
   metodoPago: String,
   observaciones: String,
-  archivoUrl: String,
+  archivo: {
+    datos: { type: Buffer, select: false },
+    nombre: String,
+    tipoMime: String,
+    tamano: Number
+  },
+  origen: { type: String, enum: ["historial", "gasto", "pago_personal"], default: "historial" },
+  referencia: mongoose.Schema.Types.ObjectId,
   gasto: { type: mongoose.Schema.Types.ObjectId, ref: "Gasto" },
   registradoPor: String
 }, { timestamps: true });

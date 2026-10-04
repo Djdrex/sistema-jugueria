@@ -19,6 +19,7 @@ const notificacionesRoutes = require("./routes/notificaciones");
 const trabajadoresRoutes = require("./routes/trabajadores");
 const gastosRoutes = require("./routes/gastos");
 const pagosPersonalRoutes = require("./routes/pagosPersonal");
+const historialRoutes = require("./routes/historial");
 
 const {
   auth,
@@ -57,6 +58,7 @@ io.use(async (socket, next) => {
 });
 
 // MIDDLEWARES
+app.use("/historial-financiero", express.json({ limit: "12mb" }));
 app.use(express.json({ limit: "64kb" }));
 app.use(cors({ origin: allowOrigin }));
 app.use("/productos", productosRoutes(io));
@@ -66,6 +68,7 @@ app.use("/notificaciones", notificacionesRoutes(io));
 app.use("/trabajadores", trabajadoresRoutes);
 app.use("/gastos", gastosRoutes);
 app.use("/pagos-personal", pagosPersonalRoutes());
+app.use("/historial-financiero", historialRoutes());
 app.use(express.static(path.join(__dirname, "public"), { etag: true, lastModified: true, maxAge: 0 }));
 
 // DB

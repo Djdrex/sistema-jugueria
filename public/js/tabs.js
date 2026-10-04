@@ -13,6 +13,7 @@ const seccionesNav = [
   ]},
   { grupo:"Administración", items:[
     { texto:"Informes", icono:"▥", click:"verInformes()", roles:["admin"] },
+    { texto:"Historial financiero", icono:"▤", click:"verHistorialFinanciero()", roles:["admin"] },
     { texto:"Trabajadores", icono:"♙", click:"verTrabajadores()", roles:["admin"] },
     { texto:"Pagos al personal", icono:"＄", click:"verPagosPersonal()", roles:["admin"] },
     { texto:"Mis pagos", icono:"＄", click:"verMisPagos()", roles:["mesero","barra"] },
