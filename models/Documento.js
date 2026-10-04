@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const DocumentoSchema = new mongoose.Schema({
   tipo: { type: String, enum: ["boleta", "factura", "recibo", "compra", "servicio", "yape", "gasto", "pago", "otro"], required: true },
+  clase: { type: String, enum: ["ingreso", "egreso"], default: "ingreso" },
   serie: String,
   numero: String,
   fecha: { type: Date, required: true },

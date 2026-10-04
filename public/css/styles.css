@@ -90,7 +90,6 @@ textarea { resize: vertical; }
 #tabs { display: flex; flex-wrap: wrap; gap: 7px; margin: 18px 0; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
 #tabs button { min-height: 38px; padding: 7px 12px; color: var(--muted); }
 #tabs button:hover, #tabs button[aria-current="page"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 42%, var(--border)); background: var(--accent-soft); }
-.nav-history-shortcut { border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border)); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
 #contenido { min-height: 240px; overflow-wrap: anywhere; }
 .module-header, .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .module-header { margin: 6px 0 20px; }

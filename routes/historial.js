@@ -22,6 +22,8 @@ module.exports = () => {
     if (tipo && !TIPOS.includes(tipo)) return res.status(400).json({ error: "Tipo inválido" });
     const filtro = {};
     if (tipo) filtro.tipo = tipo;
+    if (req.query.clase && !["ingreso", "egreso"].includes(req.query.clase)) return res.status(400).json({ error: "Clase de movimiento inválida" });
+    if (req.query.clase) filtro.clase = req.query.clase;
     if (desde) filtro.fecha = { $gte: INICIO_LIMA(desde), $lt: new Date(INICIO_LIMA(hasta).getTime() + 86400000) };
     const encontrados = await Documento.find(filtro).sort({ fecha: -1, createdAt: -1 }).limit(1000).select("-archivo.datos");
     const documentos = encontrados.map(item => { const row = item.toObject(); if (row.archivo) delete row.archivo.datos; return row; });
@@ -29,8 +31,9 @@ module.exports = () => {
   });
 
   router.post("/", async (req, res) => {
-    const { tipo, fecha, concepto, monto, metodoPago = "otro", proveedor = "", categoria = "", observaciones = "", serie = "", numero = "", ruc = "" } = req.body || {};
+    const { tipo, clase = "ingreso", fecha, concepto, monto, metodoPago = "otro", proveedor = "", categoria = "", observaciones = "", serie = "", numero = "", ruc = "", cuentaId } = req.body || {};
     if (!TIPOS.includes(tipo)) return res.status(400).json({ error: "Selecciona un tipo de registro válido" });
+    if (!["ingreso", "egreso"].includes(clase)) return res.status(400).json({ error: "Selecciona ingreso o egreso" });
     if (!fechaValida(fecha)) return res.status(400).json({ error: "Indica una fecha válida" });
     if (typeof concepto !== "string" || !concepto.trim() || concepto.trim().length > 300) return res.status(400).json({ error: "El concepto es obligatorio (máximo 300 caracteres)" });
     if (monto !== "" && monto !== null && monto !== undefined && toCents(monto) === null) return res.status(400).json({ error: "El monto debe tener hasta dos decimales" });
@@ -38,7 +41,7 @@ module.exports = () => {
     for (const [valor, maximo, etiqueta] of [[proveedor, 160, "Proveedor"], [categoria, 80, "Categoría"], [observaciones, 1000, "Observaciones"], [serie, 40, "Serie"], [numero, 60, "Número"], [ruc, 20, "RUC"]]) {
       if (typeof valor !== "string" || valor.length > maximo) return res.status(400).json({ error: `${etiqueta} inválido` });
     }
-    const documento = await Documento.create({ tipo, fecha: new Date(`${fecha}T12:00:00-05:00`), concepto: concepto.trim(), monto: monto === "" || monto === null || monto === undefined ? undefined : toCents(monto) / 100, metodoPago, proveedor: proveedor.trim(), categoria: categoria.trim(), observaciones: observaciones.trim(), serie: serie.trim(), numero: numero.trim(), ruc: ruc.trim(), origen: "historial", registradoPor: req.user.username });
+    const documento = await Documento.create({ tipo, clase, fecha: new Date(`${fecha}T12:00:00-05:00`), concepto: concepto.trim(), monto: monto === "" || monto === null || monto === undefined ? undefined : toCents(monto) / 100, metodoPago, proveedor: proveedor.trim(), categoria: categoria.trim(), observaciones: observaciones.trim(), serie: serie.trim(), numero: numero.trim(), ruc: ruc.trim(), origen: "historial", referencia: cuentaId || undefined, registradoPor: req.user.username });
     await Actividad.create({ usuario: req.user.username, accion: "HISTORIAL_FINANCIERO_REGISTRADO", detalle: `Registró ${tipo}: ${concepto.trim()}` });
     return res.status(201).json(documento);
   });
@@ -67,6 +70,35 @@ module.exports = () => {
     await documento.save();
     await Actividad.create({ usuario: req.user.username, accion: "ARCHIVO_HISTORIAL_CARGADO", detalle: `Adjuntó ${nombre.trim()} a ${documento.tipo}` });
     return res.json({ ok: true, nombre: documento.archivo.nombre, tamano: documento.archivo.tamano });
+  });
+
+  router.get("/cuentas", async (_req, res) => {
+    const cuentas = await require("mongoose").connection.collection("cuentasServicio").find().sort({ activa: -1, nombre: 1 }).limit(500).toArray();
+    return res.json(cuentas);
+  });
+
+  router.post("/cuentas", async (req, res) => {
+    const { nombre, categoria, montoEstimado, periodicidad = "mensual", diaVencimiento, proveedor = "", observaciones = "" } = req.body || {};
+    const montoCentavos = toCents(montoEstimado);
+    if (typeof nombre !== "string" || !nombre.trim() || nombre.trim().length > 120) return res.status(400).json({ error: "Indica el nombre del servicio o cuenta" });
+    if (typeof categoria !== "string" || !["sunat", "alquiler", "seguridad", "luz", "agua", "gas", "internet", "telefono", "otro"].includes(categoria)) return res.status(400).json({ error: "Selecciona una categoría de cuenta" });
+    if (montoCentavos === null || montoCentavos <= 0) return res.status(400).json({ error: "El monto estimado debe ser positivo" });
+    if (!["mensual", "semanal", "anual", "unico"].includes(periodicidad)) return res.status(400).json({ error: "Periodicidad inválida" });
+    if (!Number.isInteger(diaVencimiento) || diaVencimiento < 1 || diaVencimiento > 31) return res.status(400).json({ error: "El día de vencimiento debe estar entre 1 y 31" });
+    if (typeof proveedor !== "string" || proveedor.length > 160 || typeof observaciones !== "string" || observaciones.length > 500) return res.status(400).json({ error: "Proveedor u observaciones inválidos" });
+    const row = { nombre: nombre.trim(), categoria, montoEstimado: montoCentavos / 100, periodicidad, diaVencimiento, proveedor: proveedor.trim(), observaciones: observaciones.trim(), activa: true, creadoPor: req.user.username, creadoEn: new Date() };
+    const result = await require("mongoose").connection.collection("cuentasServicio").insertOne(row);
+    await Actividad.create({ usuario: req.user.username, accion: "CUENTA_SERVICIO_CREADA", detalle: `Creó cuenta de servicio ${row.nombre}` });
+    return res.status(201).json({ ...row, _id: result.insertedId });
+  });
+
+  router.put("/cuentas/:id", async (req, res) => {
+    const mongoose = require("mongoose");
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: "Identificador de cuenta inválido" });
+    if (typeof req.body.activa !== "boolean") return res.status(400).json({ error: "Indica si la cuenta queda activa" });
+    const result = await mongoose.connection.collection("cuentasServicio").findOneAndUpdate({ _id: new mongoose.Types.ObjectId(req.params.id) }, { $set: { activa: req.body.activa, actualizadoPor: req.user.username, actualizadoEn: new Date() } }, { returnDocument: "after" });
+    if (!result) return res.sendStatus(404);
+    return res.json(result);
   });
 
   router.get("/:id/archivo", async (req, res) => {

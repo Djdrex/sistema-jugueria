@@ -7,6 +7,7 @@ const GastoSchema = new mongoose.Schema({
   metodoPago: { type: String, default: "efectivo" },
   fecha: { type: Date, default: Date.now },
   proveedor: String,
+  cuentaId: { type: mongoose.Schema.Types.ObjectId },
   registradoPor: String,
   requestId: { type: String, trim: true, maxlength: 100 }
 }, { timestamps: true });
