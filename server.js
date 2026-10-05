@@ -366,6 +366,7 @@ app.post("/reinicio/preparar", auth, soloAdminPrincipal, async (req, res) => {
     return res.send(Buffer.from(workbook));
   } catch (error) {
     resetMaintenanceUntil = 0;
+    console.error("No se pudo preparar el informe Excel de reinicio:", error);
     throw error;
   }
 });

@@ -37,9 +37,10 @@ function addProgress(sheet, row, label, value, max, color = "638C5A") {
   sheet.getCell(`B${row}`).numFmt = MONEY_FORMAT;
   sheet.getCell(`C${row}`).value = max > 0 ? value / max : 0;
   sheet.getCell(`C${row}`).numFmt = "0.0%";
-  sheet.getCell(`D${row}`).value = max > 0 ? value / max : 0;
-  sheet.getCell(`D${row}`).numFmt = ';;;';
-  sheet.getCell(`D${row}`).fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${color}` } };
+  const ratio = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
+  const filled = Math.round(ratio * 24);
+  sheet.getCell(`D${row}`).value = `${"█".repeat(filled)}${"░".repeat(24 - filled)}`;
+  sheet.getCell(`D${row}`).font = { name: "Consolas", color: { argb: `FF${color}` }, bold: true };
   sheet.getCell(`D${row}`).alignment = { shrinkToFit: true };
 }
 
@@ -80,14 +81,19 @@ async function buildReinicioWorkbook(data, periodo) {
   for (const order of pedidos) for (const payment of order.pagos || []) salesByMethod.set(payment.metodo || "otro", (salesByMethod.get(payment.metodo || "otro") || 0) + Number(payment.monto || 0));
   const chartData = [...salesByMethod].map(([metodo, monto]) => ({ metodo, monto }));
   if (chartData.length) {
-    const chartSheet = workbook.addWorksheet("Tendencias"); chartSheet.addRows([["Método de pago", "Ventas"], ...chartData.map(row => [row.metodo, row.monto])]);
-    chartSheet.getRow(1).font = { bold: true };
-    const chart = (type, title, extra) => ({
-      type, title, ...extra,
-      series: [{ name: { formula: `Tendencias!$B$1` }, labels: { formula: `Tendencias!$A$2:$A$${chartData.length + 1}` }, values: { formula: `Tendencias!$B$2:$B$${chartData.length + 1}` } }],
+    const chartSheet = workbook.addWorksheet("Tendencias");
+    chartSheet.addRow(["Método de pago", "Ventas", "Participación", "Barra proporcional"]);
+    const totalMethodSales = chartData.reduce((sum, row) => sum + row.monto, 0);
+    chartData.forEach(({ metodo, monto }, index) => {
+      const rowNumber = index + 2, ratio = totalMethodSales > 0 ? monto / totalMethodSales : 0, filled = Math.round(ratio * 30);
+      chartSheet.addRow([metodo, monto, ratio, `${"█".repeat(filled)}${"░".repeat(30 - filled)}`]);
+      chartSheet.getCell(`B${rowNumber}`).numFmt = MONEY_FORMAT;
+      chartSheet.getCell(`C${rowNumber}`).numFmt = "0.0%";
+      chartSheet.getCell(`D${rowNumber}`).font = { name: "Consolas", color: { argb: "FF34897A" }, bold: true };
     });
-    chartSheet.addChart(chart("doughnut", "Ventas por método de pago", { holeSize: 55, showPercent: true }), "D2");
-    chartSheet.addChart(chart("bar", "Ventas por método de pago", { barDir: "bar", catAxisLabelPos: "low", valAxisLabelFormatCode: '"S/ "#,##0', showValue: true }), "D20");
+    chartSheet.getRow(1).eachCell(cell => { cell.font = { bold: true, color: { argb: "FFFFFFFF" } }; cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF123F47" } }; });
+    chartSheet.columns = [{ width: 24 }, { width: 18 }, { width: 18 }, { width: 44 }];
+    chartSheet.views = [{ state: "frozen", ySplit: 1 }];
   }
   const orderRows = pedidos.map(p => ({ fecha: dateValue(p.fecha), mesa: p.mesa, estado: p.estado, creadoPor: p.creadoPor, total: Number(p.total || 0), totalPagado: Number(p.totalPagado || 0), saldo: Math.max(0, Number(p.total || 0) - Number(p.totalPagado || 0)), pagado: p.pagado, metodos: [...new Set((p.pagos || []).map(x => x.metodo))].join(", "), pagos: safe(p.pagos), detalle: safe(p.items) }));
   addTable(workbook, "Pedidos", [{header:"Fecha",key:"fecha",width:22},{header:"Mesa",key:"mesa"},{header:"Estado",key:"estado"},{header:"Registrado por",key:"creadoPor"},{header:"Total",key:"total"},{header:"Cobrado",key:"totalPagado"},{header:"Saldo",key:"saldo"},{header:"Pagado",key:"pagado"},{header:"Métodos",key:"metodos"},{header:"Detalle de pagos",key:"pagos",width:45},{header:"Productos y notas",key:"detalle",width:60}], orderRows, [5,6,7]);
