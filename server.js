@@ -84,6 +84,20 @@ const Notificacion = require("./models/Notificacion");
 const Gasto = require("./models/Gasto");
 const Categoria = require("./models/Categoria");
 const MovimientoInventario = require("./models/MovimientoInventario");
+const Documento = require("./models/Documento");
+const PagoTrabajador = require("./models/PagoTrabajador");
+const Asistencia = require("./models/Asistencia");
+const { buildReinicioWorkbook, safe: safeExcelValue } = require("./services/reinicioReport");
+const bcrypt = require("bcrypt");
+const resetPackages = new Map();
+let resetMaintenanceUntil = 0;
+const RESET_PACKAGE_TTL = 15 * 60 * 1000;
+
+app.use((req, res, next) => {
+  if (resetMaintenanceUntil > Date.now() && !req.path.startsWith("/reinicio/") && req.method !== "GET" && req.method !== "HEAD" && req.method !== "OPTIONS") return res.status(423).json({ error: "El sistema está en cierre mensual o anual. Reintenta al terminar el reinicio." });
+  if (resetMaintenanceUntil && resetMaintenanceUntil <= Date.now()) { resetMaintenanceUntil = 0; resetPackages.clear(); }
+  next();
+});
 
 async function registrarActividad(usuario, accion, detalle){
 
@@ -291,14 +305,103 @@ app.put("/sedes/:id", auth, soloAdminPrincipal, async (req, res) => {
   return res.json(result);
 });
 
+function resetPeriod(body = {}) {
+  const type = body.periodo;
+  let desde, hasta;
+  if (type === "mensual" && /^\d{4}-\d{2}$/.test(body.mes || "")) {
+    const [year, month] = body.mes.split("-").map(Number);
+    if (year < 2000 || year > 2200 || month < 1 || month > 12) return null;
+    desde = `${body.mes}-01`;
+    hasta = `${body.mes}-${String(new Date(Date.UTC(year, month, 0)).getUTCDate()).padStart(2, "0")}`;
+  } else if (type === "anual" && /^\d{4}$/.test(body.anio || "")) {
+    const year = Number(body.anio); if (year < 2000 || year > 2200) return null;
+    desde = `${body.anio}-01-01`; hasta = `${body.anio}-12-31`;
+  } else return null;
+  return { desde, hasta, etiqueta: type === "mensual" ? body.mes : body.anio, tipo: type, inicio: new Date(`${desde}T00:00:00-05:00`), fin: new Date(new Date(`${hasta}T00:00:00-05:00`).getTime() + 86400000) };
+}
+
+async function resetSnapshot(period) {
+  const dateQuery = { $gte: period.inicio, $lt: period.fin };
+  const [pedidos, gastos, pagos, movimientos, asistencias, caja, notificaciones, documentos, cuentas, productos, categorias] = await Promise.all([
+    Pedido.find({ fecha: dateQuery }).lean(), Gasto.find({ fecha: dateQuery }).lean(), PagoTrabajador.find({ fecha: dateQuery }).lean(), MovimientoInventario.find({ fecha: dateQuery }).lean(),
+    Asistencia.find({ fecha: { $gte: period.desde, $lte: period.hasta } }).lean(), Caja.find({ fecha: dateQuery }).lean(), Notificacion.find({ fecha: dateQuery }).lean(),
+    Documento.find({ fecha: dateQuery }).select("+archivo.datos").lean(), mongoose.connection.collection("cuentasServicio").find().sort({ nombre: 1 }).toArray(), Producto.find().lean(), Categoria.find().lean()
+  ]);
+  const adjuntos = [];
+  for (const documento of documentos) if (documento.archivo?.datos?.length) adjuntos.push({ documentoId: String(documento._id), nombre: documento.archivo.nombre || "archivo", mime: documento.archivo.tipoMime || "application/octet-stream", tamano: documento.archivo.tamano || documento.archivo.datos.length, datos: documento.archivo.datos });
+  for (const row of [...gastos, ...pagos, ...movimientos, ...asistencias, ...caja, ...notificaciones, ...documentos, ...cuentas, ...productos, ...categorias]) for (const key of Object.keys(row)) row[key] = safeExcelValue(row[key]);
+  for (const pedido of pedidos) for (const key of Object.keys(pedido)) pedido[key] = safeExcelValue(pedido[key]);
+  return { pedidos, gastos, pagos, movimientos, asistencias, caja, notificaciones, documentos, cuentas, productos, categorias, adjuntos };
+}
+
 app.post("/reinicio/preview", auth, soloAdminPrincipal, async (req, res) => {
   const actual = await Usuario.findById(req.user.id).select("password username");
-  if (!actual || typeof req.body.password !== "string" || !(await require("bcrypt").compare(req.body.password, actual.password))) return res.status(401).json({ error:"Contraseña actual incorrecta" });
-  const conteos = await Promise.all([Pedido.countDocuments(), Gasto.countDocuments(), require("./models/PagoTrabajador").countDocuments(), MovimientoInventario.countDocuments(), require("./models/Asistencia").countDocuments(), Notificacion.countDocuments()]);
-  return res.json({ backupDisponible:false, colecciones:["pedidos", "gastos", "pagos de personal", "movimientos de inventario", "asistencias", "notificaciones"].map((nombre, i) => ({ nombre, registros:conteos[i] })), bloqueado:"No se configuró un destino verificable de respaldo. El reinicio no está habilitado." });
+  if (!actual || typeof req.body.password !== "string" || !(await bcrypt.compare(req.body.password, actual.password))) return res.status(401).json({ error:"Contraseña actual incorrecta" });
+  const period = resetPeriod(req.body);
+  if (!period) return res.status(400).json({ error:"Selecciona un mes o año válido para el informe." });
+  const [pedidos, gastos, pagos, movimientos, asistencias, caja, notificaciones, documentos, cuentas, productos, categorias] = await Promise.all([
+    Pedido.countDocuments({ fecha: { $gte: period.inicio, $lt: period.fin } }), Gasto.countDocuments({ fecha: { $gte: period.inicio, $lt: period.fin } }), PagoTrabajador.countDocuments({ fecha: { $gte: period.inicio, $lt: period.fin } }),
+    MovimientoInventario.countDocuments({ fecha: { $gte: period.inicio, $lt: period.fin } }), Asistencia.countDocuments({ fecha: { $gte: period.desde, $lte: period.hasta } }), Caja.countDocuments({ fecha: { $gte: period.inicio, $lt: period.fin } }),
+    Notificacion.countDocuments({ fecha: { $gte: period.inicio, $lt: period.fin } }), Documento.countDocuments({ fecha: { $gte: period.inicio, $lt: period.fin } }), mongoose.connection.collection("cuentasServicio").countDocuments(), Producto.countDocuments(), Categoria.countDocuments()
+  ]);
+  return res.json({ modo:"prueba", modificaciones:0, archivoCreado:false, periodo:{ tipo:period.tipo, desde:period.desde, hasta:period.hasta }, colecciones:["Pedidos", "Gastos", "Pagos de personal", "Movimientos de inventario", "Asistencias", "Cierres de caja", "Notificaciones", "Documentos financieros", "Cuentas de servicio", "Productos e insumos", "Categorías"].map((nombre, index) => ({ nombre, registros:[pedidos,gastos,pagos,movimientos,asistencias,caja,notificaciones,documentos,cuentas,productos,categorias][index] })), mensaje:"Modo prueba: consulta de solo lectura; no se guardó un archivo ni se modificaron datos." });
 });
 
-app.post("/reinicio", auth, soloAdminPrincipal, (_req, res) => res.status(503).json({ error:"Reinicio bloqueado: configura y verifica un destino de respaldo antes de habilitar borrados." }));
+app.post("/reinicio/preparar", auth, soloAdminPrincipal, async (req, res) => {
+  const actual = await Usuario.findById(req.user.id).select("password username");
+  if (!actual || typeof req.body.password !== "string" || !(await bcrypt.compare(req.body.password, actual.password))) return res.status(401).json({ error:"Contraseña actual incorrecta" });
+  if (req.body.modo !== "real") return res.status(400).json({ error:"Selecciona modo de uso real para preparar un reinicio." });
+  const period = resetPeriod(req.body);
+  if (!period) return res.status(400).json({ error:"Selecciona un mes o año válido para el informe." });
+  if (resetMaintenanceUntil > Date.now()) return res.status(409).json({ error:"Ya hay un cierre en preparación." });
+  resetPackages.clear();
+  resetMaintenanceUntil = Date.now() + RESET_PACKAGE_TTL;
+  try {
+    const snapshot = await resetSnapshot(period);
+    const workbook = await buildReinicioWorkbook(snapshot, period);
+    const id = require("crypto").randomBytes(24).toString("hex");
+    resetPackages.set(id, { creadoPor:String(req.user.id), workbook, desde:period.inicio, fin:period.fin, tipo:period.tipo, etiqueta:period.etiqueta, conteos:{ pedidos:snapshot.pedidos.length, notificaciones:snapshot.notificaciones.length, documentos:snapshot.documentos.length }, expires:Date.now() + RESET_PACKAGE_TTL, usado:false });
+    for (const [key, value] of resetPackages) if (value.expires <= Date.now()) resetPackages.delete(key);
+    res.set({ "Content-Type":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition":`attachment; filename="informe-${period.tipo}-${period.etiqueta}.xlsx"`, "Cache-Control":"no-store", "X-Reset-Token":id });
+    return res.send(Buffer.from(workbook));
+  } catch (error) {
+    resetMaintenanceUntil = 0;
+    throw error;
+  }
+});
+
+app.post("/reinicio/cancelar", auth, soloAdminPrincipal, (req, res) => {
+  const pack = resetPackages.get(req.body.id);
+  if (pack && pack.creadoPor === String(req.user.id)) resetPackages.delete(req.body.id);
+  if (!pack || pack.creadoPor === String(req.user.id)) resetMaintenanceUntil = 0;
+  return res.json({ ok:true });
+});
+
+app.post("/reinicio/confirmar", auth, soloAdminPrincipal, async (req, res) => {
+  const pack = resetPackages.get(req.body.id);
+  if (!pack || pack.creadoPor !== String(req.user.id) || pack.expires < Date.now() || pack.usado) return res.status(410).json({ error:"El informe expiró o ya se utilizó. Prepara una nueva descarga." });
+  if (req.body.confirmacion !== "REINICIAR" || req.body.descargado !== true) return res.status(400).json({ error:"Confirma la descarga del Excel y escribe REINICIAR." });
+  if (resetMaintenanceUntil <= Date.now()) return res.status(410).json({ error:"El periodo de confirmación expiró. Prepara una nueva descarga." });
+  pack.usado = true;
+  const session = await mongoose.startSession();
+  try {
+    const ordersInScope = await Pedido.countDocuments({ fecha: { $gte: pack.desde, $lt: pack.fin } }).session(session);
+    const notificationsInScope = await Notificacion.countDocuments({ fecha: { $gte: pack.desde, $lt: pack.fin } }).session(session);
+    const archive = await Documento.countDocuments({ fecha: { $gte: pack.desde, $lt: pack.fin } }).session(session);
+    if (ordersInScope !== pack.conteos.pedidos || notificationsInScope !== pack.conteos.notificaciones || archive !== pack.conteos.documentos) throw Object.assign(new Error("Los datos del periodo cambiaron desde que se generó el informe. Descarga un nuevo Excel."), { code:"RESET_SNAPSHOT_CHANGED" });
+    await session.withTransaction(async () => {
+      await Pedido.deleteMany({ fecha: { $gte: pack.desde, $lt: pack.fin } }, { session });
+      await Notificacion.deleteMany({ fecha: { $gte: pack.desde, $lt: pack.fin } }, { session });
+    });
+    resetPackages.delete(req.body.id); resetMaintenanceUntil = 0;
+    return res.json({ ok:true, mensaje:`Cierre ${pack.tipo} ${pack.etiqueta} completado. El Excel ya fue descargado; los demás datos siguen en el sistema.` });
+  } catch (error) {
+    pack.usado = false; resetMaintenanceUntil = 0;
+    if (error.code === "RESET_SNAPSHOT_CHANGED") return res.status(409).json({ error:error.message });
+    if (error.code === 20 || /replica set|transaction numbers are only allowed/i.test(error.message || "")) return res.status(503).json({ error:"MongoDB no admite transacciones en esta instancia; no se eliminó ningún pedido ni notificación. Usa un MongoDB con transacciones y vuelve a intentar." });
+    throw error;
+  } finally { await session.endSession(); }
+});
 
 
 
