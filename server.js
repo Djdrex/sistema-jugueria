@@ -325,13 +325,11 @@ async function resetSnapshot(period) {
   const [pedidos, gastos, pagos, movimientos, asistencias, caja, notificaciones, documentos, cuentas, productos, categorias] = await Promise.all([
     Pedido.find({ fecha: dateQuery }).lean(), Gasto.find({ fecha: dateQuery }).lean(), PagoTrabajador.find({ fecha: dateQuery }).lean(), MovimientoInventario.find({ fecha: dateQuery }).lean(),
     Asistencia.find({ fecha: { $gte: period.desde, $lte: period.hasta } }).lean(), Caja.find({ fecha: dateQuery }).lean(), Notificacion.find({ fecha: dateQuery }).lean(),
-    Documento.find({ fecha: dateQuery }).select("+archivo.datos").lean(), mongoose.connection.collection("cuentasServicio").find().sort({ nombre: 1 }).toArray(), Producto.find().lean(), Categoria.find().lean()
+    Documento.find({ fecha: dateQuery }).select("-archivo.datos").lean(), mongoose.connection.collection("cuentasServicio").find({}, { projection: { _id:1, nombre:1, categoria:1, montoEstimado:1, periodicidad:1, diaVencimiento:1, proveedor:1, activa:1, ultimoPago:1, ultimoPagoMonto:1 } }).sort({ nombre: 1 }).toArray(), Producto.find().lean(), Categoria.find().lean()
   ]);
-  const adjuntos = [];
-  for (const documento of documentos) if (documento.archivo?.datos?.length) adjuntos.push({ documentoId: String(documento._id), nombre: documento.archivo.nombre || "archivo", mime: documento.archivo.tipoMime || "application/octet-stream", tamano: documento.archivo.tamano || documento.archivo.datos.length, datos: documento.archivo.datos });
   for (const row of [...gastos, ...pagos, ...movimientos, ...asistencias, ...caja, ...notificaciones, ...documentos, ...cuentas, ...productos, ...categorias]) for (const key of Object.keys(row)) row[key] = safeExcelValue(row[key]);
   for (const pedido of pedidos) for (const key of Object.keys(pedido)) pedido[key] = safeExcelValue(pedido[key]);
-  return { pedidos, gastos, pagos, movimientos, asistencias, caja, notificaciones, documentos, cuentas, productos, categorias, adjuntos };
+  return { pedidos, gastos, pagos, movimientos, asistencias, caja, notificaciones, documentos, cuentas, productos, categorias };
 }
 
 app.post("/reinicio/preview", auth, soloAdminPrincipal, async (req, res) => {
@@ -358,7 +356,9 @@ app.post("/reinicio/preparar", auth, soloAdminPrincipal, async (req, res) => {
   resetMaintenanceUntil = Date.now() + RESET_PACKAGE_TTL;
   try {
     const snapshot = await resetSnapshot(period);
-    const workbook = await buildReinicioWorkbook(snapshot, period);
+    let workbook;
+    try { workbook = await buildReinicioWorkbook(snapshot, period); }
+    catch (error) { error.message = `Error al organizar las hojas del Excel: ${error.message}`; throw error; }
     const id = require("crypto").randomBytes(24).toString("hex");
     resetPackages.set(id, { creadoPor:String(req.user.id), workbook, desde:period.inicio, fin:period.fin, tipo:period.tipo, etiqueta:period.etiqueta, conteos:{ pedidos:snapshot.pedidos.length, notificaciones:snapshot.notificaciones.length, documentos:snapshot.documentos.length }, expires:Date.now() + RESET_PACKAGE_TTL, usado:false });
     for (const [key, value] of resetPackages) if (value.expires <= Date.now()) resetPackages.delete(key);
@@ -366,8 +366,8 @@ app.post("/reinicio/preparar", auth, soloAdminPrincipal, async (req, res) => {
     return res.send(Buffer.from(workbook));
   } catch (error) {
     resetMaintenanceUntil = 0;
-    console.error("No se pudo preparar el informe Excel de reinicio:", error);
-    throw error;
+    console.error("No se pudo preparar el informe Excel de reinicio:", error.stack || error);
+    return res.status(500).json({ error:"No se pudo generar el Excel. Verifica los registros del periodo e inténtalo nuevamente.", detalle: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 });
 

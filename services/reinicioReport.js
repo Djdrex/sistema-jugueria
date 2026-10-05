@@ -1,123 +1,106 @@
 const ExcelJS = require("exceljs");
 
 const MONEY_FORMAT = '"S/ "#,##0.00';
-const safe = value => {
+const text = value => {
   if (value === null || value === undefined) return "";
   if (value instanceof Date) return value;
   if (Buffer.isBuffer(value)) return "";
-  if (Array.isArray(value)) return value.map(safe).join(" | ");
-  if (typeof value === "object") {
-    if (value._bsontype === "ObjectId") return String(value);
-    if (value._bsontype === "Decimal128") return Number(value.toString());
-    return JSON.stringify(value, (_key, nested) => Buffer.isBuffer(nested) ? undefined : nested);
-  }
+  if (Array.isArray(value)) return value.map(text).join(" | ");
+  if (typeof value === "object") return value._bsontype === "ObjectId" ? String(value) : JSON.stringify(value);
   return value;
 };
-const dateValue = value => value ? (value instanceof Date ? value : new Date(value)) : "";
+const date = value => value ? (value instanceof Date ? value : new Date(value)) : "";
 
-function addTable(workbook, name, columns, rows, moneyColumns = []) {
-  const sheet = workbook.addWorksheet(name, { views: [{ state: "frozen", ySplit: 1 }] });
-  sheet.columns = columns.map(column => ({ header: column.header, key: column.key, width: column.width || 20 }));
-  sheet.addRows(rows);
-  sheet.getRow(1).height = 26;
-  sheet.getRow(1).eachCell(cell => {
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF123F47" } };
-    cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+function addSection(workbook, name, title, headers, rows, widths = []) {
+  const sheet = workbook.addWorksheet(name, { views: [{ state: "frozen", ySplit: 3 }] });
+  const endColumn = String.fromCharCode(64 + headers.length);
+  sheet.mergeCells(`A1:${endColumn}1`);
+  sheet.getCell("A1").value = title.toUpperCase();
+  sheet.getCell("A1").font = { bold: true, size: 15, color: { argb: "FFFFFFFF" } };
+  sheet.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF123F47" } };
+  sheet.getCell("A1").alignment = { vertical: "middle", horizontal: "left" };
+  sheet.getRow(1).height = 30;
+  sheet.mergeCells(`A2:${endColumn}2`);
+  sheet.getCell("A2").value = "Registros ordenados por fecha. Usa los filtros de la fila 3 para consultar cada columna.";
+  sheet.getCell("A2").font = { italic: true, color: { argb: "FF52666A" } };
+  sheet.addRow(headers);
+  const header = sheet.getRow(3);
+  header.height = 25;
+  header.eachCell(cell => {
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF24736B" } };
     cell.alignment = { vertical: "middle", wrapText: true };
   });
-  sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: columns.length } };
-  for (const column of moneyColumns) sheet.getColumn(column).numFmt = MONEY_FORMAT;
-  sheet.eachRow((row, index) => { if (index > 1 && index % 2 === 0) row.eachCell(cell => { cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF1F7F5" } }; }); });
+  for (const row of rows) sheet.addRow(row);
+  sheet.autoFilter = { from: { row: 3, column: 1 }, to: { row: Math.max(3, rows.length + 3), column: headers.length } };
+  sheet.columns = headers.map((_, index) => ({ width: widths[index] || 20 }));
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber > 3) {
+      row.height = 21;
+      if (rowNumber % 2 === 0) row.eachCell(cell => { cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF0F6F4" } }; });
+    }
+  });
   return sheet;
 }
 
-function addProgress(sheet, row, label, value, max, color = "638C5A") {
-  sheet.getCell(`A${row}`).value = label;
-  sheet.getCell(`B${row}`).value = value;
-  sheet.getCell(`B${row}`).numFmt = MONEY_FORMAT;
-  sheet.getCell(`C${row}`).value = max > 0 ? value / max : 0;
-  sheet.getCell(`C${row}`).numFmt = "0.0%";
-  const ratio = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
-  const filled = Math.round(ratio * 24);
-  sheet.getCell(`D${row}`).value = `${"█".repeat(filled)}${"░".repeat(24 - filled)}`;
-  sheet.getCell(`D${row}`).font = { name: "Consolas", color: { argb: `FF${color}` }, bold: true };
-  sheet.getCell(`D${row}`).alignment = { shrinkToFit: true };
+function progress(value, max, length = 22) {
+  const filled = max > 0 ? Math.round(Math.min(1, Math.max(0, value / max)) * length) : 0;
+  return `${"#".repeat(filled)}${"-".repeat(length - filled)}`;
 }
 
 async function buildReinicioWorkbook(data, periodo) {
+  const { pedidos = [], gastos = [], pagos = [], movimientos = [], asistencias = [], caja = [], notificaciones = [], documentos = [], cuentas = [], productos = [], categorias = [] } = data;
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Sistema de juguería";
-  workbook.subject = `Informe de cierre ${periodo.etiqueta}`;
-  workbook.title = `Informe financiero y operativo ${periodo.etiqueta}`;
+  workbook.subject = `Informe ${periodo.etiqueta}`;
+  workbook.title = `Cierre ${periodo.tipo} ${periodo.etiqueta}`;
   workbook.created = new Date();
   workbook.calcProperties.fullCalcOnLoad = true;
-  const { pedidos, gastos, pagos, movimientos, asistencias, caja, notificaciones, documentos, cuentas, productos, categorias, adjuntos } = data;
-  const totalVentas = pedidos.reduce((sum, p) => sum + Number(p.totalPagado ?? (p.pagado ? p.total : 0) ?? 0), 0);
-  const ingresos = documentos.filter(d => d.clase === "ingreso" && d.origen === "historial").reduce((sum, d) => sum + Number(d.monto || 0), 0);
-  const totalGastos = gastos.reduce((sum, g) => sum + Number(g.monto || 0), 0);
-  const totalPagos = pagos.reduce((sum, p) => sum + Number(p.monto || 0), 0);
-  const egresos = totalGastos + totalPagos;
-  const neto = totalVentas + ingresos - egresos;
-  const max = Math.max(totalVentas, ingresos, egresos, 1);
-  const resumen = workbook.addWorksheet("Resumen", { views: [{ showGridLines: false }] });
-  resumen.mergeCells("A1:F1"); resumen.getCell("A1").value = `INFORME FINANCIERO Y OPERATIVO · ${periodo.etiqueta.toUpperCase()}`;
-  resumen.getCell("A1").font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
-  resumen.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF123F47" } };
-  resumen.getCell("A1").alignment = { vertical: "middle", horizontal: "center" }; resumen.getRow(1).height = 36;
-  resumen.mergeCells("A2:F2"); resumen.getCell("A2").value = `Periodo: ${periodo.desde} al ${periodo.hasta} · Generado: ${new Date().toLocaleString("es-PE", { timeZone: "America/Lima" })} · Moneda: PEN`;
-  const tiles = [["A4:B4", "VENTAS COBRADAS", totalVentas], ["C4:D4", "OTROS INGRESOS", ingresos], ["E4:F4", "EGRESOS", egresos], ["A7:B7", "RESULTADO NETO", neto], ["C7:D7", "PEDIDOS", pedidos.length], ["E7:F7", "GASTOS REGISTRADOS", gastos.length]];
-  for (const [range, label, value] of tiles) {
-    resumen.mergeCells(range); const cell = resumen.getCell(range.split(":")[0]); cell.value = label; cell.font = { bold: true, color: { argb: "FF123F47" } }; cell.alignment = { horizontal: "center" };
-    const row = Number(range.match(/\d+/)[0]) + 1; const cols = range.match(/[A-F]/g); resumen.mergeCells(`${cols[0]}${row}:${cols[1]}${row}`); const amount = resumen.getCell(`${cols[0]}${row}`); amount.value = value; amount.numFmt = typeof value === "number" && !Number.isInteger(value) ? MONEY_FORMAT : "#,##0"; amount.font = { bold: true, size: 16, color: { argb: "FF1D564B" } }; amount.alignment = { horizontal: "center" };
+
+  const ventas = pedidos.reduce((sum, row) => sum + Number(row.totalPagado ?? (row.pagado ? row.total : 0) ?? 0), 0);
+  const ingresos = documentos.filter(row => row.clase === "ingreso" && row.origen === "historial").reduce((sum, row) => sum + Number(row.monto || 0), 0);
+  const egresosGastos = gastos.reduce((sum, row) => sum + Number(row.monto || 0), 0);
+  const egresosPersonal = pagos.reduce((sum, row) => sum + Number(row.monto || 0), 0);
+  const egresos = egresosGastos + egresosPersonal;
+  const max = Math.max(ventas, ingresos, egresos, 1);
+
+  const summary = workbook.addWorksheet("Resumen", { views: [{ showGridLines: false }] });
+  summary.mergeCells("A1:F1"); summary.getCell("A1").value = `INFORME DE CIERRE ${periodo.etiqueta}`;
+  summary.getCell("A1").font = { bold: true, size: 17, color: { argb: "FFFFFFFF" } };
+  summary.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF123F47" } };
+  summary.getCell("A1").alignment = { horizontal: "center", vertical: "middle" }; summary.getRow(1).height = 38;
+  summary.mergeCells("A2:F2"); summary.getCell("A2").value = `Periodo: ${periodo.desde} al ${periodo.hasta}  |  Generado: ${new Date().toLocaleString("es-PE", { timeZone: "America/Lima" })}  |  Moneda: PEN`;
+  summary.getCell("A2").alignment = { horizontal: "center" };
+  const cards = [["A4:B4", "VENTAS COBRADAS", ventas], ["C4:D4", "OTROS INGRESOS", ingresos], ["E4:F4", "EGRESOS", egresos], ["A7:B7", "RESULTADO NETO", ventas + ingresos - egresos], ["C7:D7", "PEDIDOS", pedidos.length], ["E7:F7", "GASTOS", gastos.length]];
+  for (const [range, label, amount] of cards) {
+    const [start, end] = range.split(":"); summary.mergeCells(range); const labelCell = summary.getCell(start); labelCell.value = label; labelCell.font = { bold: true, color: { argb: "FF123F47" } }; labelCell.alignment = { horizontal: "center" };
+    const row = Number(start.match(/\d+/)[0]) + 1, first = start.match(/[A-F]/)[0], last = end.match(/[A-F]/)[0]; summary.mergeCells(`${first}${row}:${last}${row}`); const valueCell = summary.getCell(`${first}${row}`); valueCell.value = amount; valueCell.numFmt = typeof amount === "number" && !Number.isInteger(amount) ? MONEY_FORMAT : "#,##0"; valueCell.font = { bold: true, size: 16, color: { argb: "FF24736B" } }; valueCell.alignment = { horizontal: "center" };
   }
-  resumen.getCell("A10").value = "Indicador"; resumen.getCell("B10").value = "Monto"; resumen.getCell("C10").value = "% del valor mayor"; resumen.getCell("D10").value = "Barra comparativa";
-  resumen.getRow(10).eachCell(cell => { cell.font = { bold: true, color: { argb: "FFFFFFFF" } }; cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF123F47" } }; });
-  addProgress(resumen, 11, "Ventas cobradas", totalVentas, max, "34897A"); addProgress(resumen, 12, "Otros ingresos", ingresos, max, "4F9A78"); addProgress(resumen, 13, "Egresos", egresos, max, "CB7856");
-  resumen.getColumn(1).width = 24; resumen.getColumn(2).width = 18; resumen.getColumn(3).width = 23; resumen.getColumn(4).width = 42; resumen.getColumn(5).width = 18; resumen.getColumn(6).width = 18;
-  resumen.getCell("A15").value = "Criterio de cálculo"; resumen.getCell("A15").font = { bold: true };
-  resumen.mergeCells("A16:F17"); resumen.getCell("A16").value = "El resultado neto resta gastos y pagos de personal a ventas cobradas y otros ingresos registrados manualmente. El inventario actual y las cuentas de servicio se presentan como fotografía del momento de exportación. Los documentos con archivo adjunto se incluyen en la hoja AdjuntosBase64, divididos en bloques para respetar el límite de Excel."; resumen.getCell("A16").alignment = { wrapText: true, vertical: "top" };
-  resumen.getRow(16).height = 32; resumen.getRow(17).height = 26;
-  const salesByMethod = new Map();
-  for (const order of pedidos) for (const payment of order.pagos || []) salesByMethod.set(payment.metodo || "otro", (salesByMethod.get(payment.metodo || "otro") || 0) + Number(payment.monto || 0));
-  const chartData = [...salesByMethod].map(([metodo, monto]) => ({ metodo, monto }));
-  if (chartData.length) {
-    const chartSheet = workbook.addWorksheet("Tendencias");
-    chartSheet.addRow(["Método de pago", "Ventas", "Participación", "Barra proporcional"]);
-    const totalMethodSales = chartData.reduce((sum, row) => sum + row.monto, 0);
-    chartData.forEach(({ metodo, monto }, index) => {
-      const rowNumber = index + 2, ratio = totalMethodSales > 0 ? monto / totalMethodSales : 0, filled = Math.round(ratio * 30);
-      chartSheet.addRow([metodo, monto, ratio, `${"█".repeat(filled)}${"░".repeat(30 - filled)}`]);
-      chartSheet.getCell(`B${rowNumber}`).numFmt = MONEY_FORMAT;
-      chartSheet.getCell(`C${rowNumber}`).numFmt = "0.0%";
-      chartSheet.getCell(`D${rowNumber}`).font = { name: "Consolas", color: { argb: "FF34897A" }, bold: true };
-    });
-    chartSheet.getRow(1).eachCell(cell => { cell.font = { bold: true, color: { argb: "FFFFFFFF" } }; cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF123F47" } }; });
-    chartSheet.columns = [{ width: 24 }, { width: 18 }, { width: 18 }, { width: 44 }];
-    chartSheet.views = [{ state: "frozen", ySplit: 1 }];
+  summary.addRow([]); summary.addRow(["INDICADOR", "MONTO", "PARTICIPACIÓN", "BARRA VISUAL"]);
+  const header = summary.getRow(10); header.eachCell(cell => { cell.font = { bold: true, color: { argb: "FFFFFFFF" } }; cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF24736B" } }; });
+  [["Ventas cobradas", ventas], ["Otros ingresos", ingresos], ["Egresos", egresos], ["Gastos", egresosGastos], ["Pagos de personal", egresosPersonal]].forEach(([label, value]) => {
+    const row = summary.addRow([label, value, max ? value / max : 0, progress(value, max)]); row.getCell(2).numFmt = MONEY_FORMAT; row.getCell(3).numFmt = "0.0%"; row.getCell(4).font = { name: "Consolas", bold: true, color: { argb: "FF24736B" } };
+  });
+  summary.columns = [{ width: 25 }, { width: 19 }, { width: 21 }, { width: 28 }, { width: 20 }, { width: 20 }];
+  summary.mergeCells("A18:F18"); summary.getCell("A18").value = "El archivo se genera para descarga local. Las hojas siguientes contienen el detalle del periodo y los registros generales seleccionados."; summary.getCell("A18").alignment = { wrapText: true };
+
+  addSection(workbook, "Pedidos", "Pedidos y ventas", ["Fecha", "Mesa", "Estado", "Atendido por", "Total", "Cobrado", "Saldo", "Pagado", "Métodos", "Detalle de pagos", "Productos y notas"], pedidos.map(row => [date(row.fecha), row.mesa, row.estado, row.creadoPor, Number(row.total || 0), Number(row.totalPagado || 0), Math.max(0, Number(row.total || 0) - Number(row.totalPagado || 0)), row.pagado, [...new Set((row.pagos || []).map(payment => payment.metodo))].join(", "), text(row.pagos), text(row.items)]), [22, 12, 16, 20, 15, 15, 15, 12, 18, 42, 55]);
+  addSection(workbook, "Gastos", "Gastos y compras", ["Fecha", "Tipo", "Categoría", "Descripción", "Monto", "Método", "Proveedor", "Registrado por"], gastos.map(row => [date(row.fecha), row.tipo, row.categoria, row.descripcion, Number(row.monto || 0), row.metodoPago, row.proveedor, row.registradoPor]), [22, 15, 20, 42, 15, 18, 24, 20]);
+  addSection(workbook, "Ingresos", "Otros ingresos y documentos", ["Fecha", "Clase", "Tipo", "Concepto", "Monto", "Proveedor", "Método", "Serie", "Número", "RUC", "Archivo adjunto", "Registrado por"], documentos.map(row => [date(row.fecha), row.clase, row.tipo, row.concepto, Number(row.monto || 0), row.proveedor, row.metodoPago, row.serie, row.numero, row.ruc, row.archivo?.nombre || "", row.registradoPor]), [22, 14, 15, 38, 15, 24, 18, 14, 16, 16, 30, 20]);
+  addSection(workbook, "PagosPersonal", "Pagos de personal", ["Fecha", "Trabajador", "Monto", "Método", "Nota", "Registrado por", "Autorizado por"], pagos.map(row => [date(row.fecha), text(row.trabajador), Number(row.monto || 0), row.metodoPago, row.nota, row.registradoPor, row.autorizadoPor]), [22, 28, 15, 18, 40, 22, 22]);
+  addSection(workbook, "Inventario", "Movimientos de inventario", ["Fecha", "Producto", "Cambio", "Saldo", "Tipo", "Motivo", "Usuario"], movimientos.map(row => [date(row.fecha), row.nombreProducto, row.cambio, row.saldo, row.tipo, row.motivo, row.usuario]), [22, 32, 14, 14, 16, 42, 22]);
+  addSection(workbook, "Asistencias", "Asistencias", ["Fecha", "Trabajador", "Estado", "Entrada", "Salida", "Minutos tardanza", "Pago diario", "Observaciones", "Registrado por"], asistencias.map(row => [row.fecha, text(row.trabajador), row.estado, date(row.entrada), date(row.salida), row.minutosTardanza, Number(row.pagoDiario || 0), row.observaciones, row.registradoPor]), [16, 28, 17, 22, 22, 18, 15, 40, 22]);
+  addSection(workbook, "Caja", "Cierres de caja", ["Fecha", "Fecha operativa", "Ventas", "Cantidad pedidos", "Cerrado por"], caja.map(row => [date(row.fecha), row.fechaOperativa, Number(row.totalVentas || 0), row.cantidadPedidos, row.cerradoPor]), [22, 20, 18, 20, 25]);
+  addSection(workbook, "Notificaciones", "Notificaciones del periodo", ["Fecha", "Usuario", "Rol", "Mensaje", "Leído"], notificaciones.map(row => [date(row.fecha), row.usuario, row.rol, row.mensaje, row.leido]), [22, 24, 18, 70, 14]);
+  addSection(workbook, "Servicios", "Cuentas y servicios", ["Nombre", "Categoría", "Monto estimado", "Periodicidad", "Día vencimiento", "Proveedor", "Activa", "Último pago", "Monto último pago"], cuentas.map(row => [row.nombre, row.categoria, Number(row.montoEstimado || 0), row.periodicidad, row.diaVencimiento, row.proveedor, row.activa, date(row.ultimoPago), Number(row.ultimoPagoMonto || 0)]), [30, 20, 20, 18, 18, 25, 14, 22, 20]);
+  addSection(workbook, "Productos", "Productos e inventario actual", ["Nombre", "Tipo", "Categoría", "Precio", "Costo", "Stock", "Stock mínimo", "Unidad", "Activo", "Receta"], productos.map(row => [row.nombre, row.tipo, row.categoria, Number(row.precio || 0), Number(row.costo || 0), Number(row.stock || 0), Number(row.stockMinimo || 0), row.unidad, row.activo, text(row.receta)]), [32, 16, 22, 15, 15, 15, 18, 16, 14, 45]);
+  addSection(workbook, "Categorias", "Categorías", ["Nombre", "Descripción", "Activa"], categorias.map(row => [row.nombre, row.descripcion, row.activo]), [32, 60, 15]);
+
+  for (const sheetName of ["Pedidos", "Gastos", "Ingresos", "PagosPersonal", "Caja", "Servicios", "Productos"]) {
+    const sheet = workbook.getWorksheet(sheetName);
+    sheet.eachRow((row, index) => { if (index > 3) row.eachCell(cell => { if (typeof cell.value === "number" && /monto|total|cobrado|saldo|ventas/i.test(String(sheet.getRow(3).getCell(cell.col).value))) cell.numFmt = MONEY_FORMAT; }); });
   }
-  const orderRows = pedidos.map(p => ({ fecha: dateValue(p.fecha), mesa: p.mesa, estado: p.estado, creadoPor: p.creadoPor, total: Number(p.total || 0), totalPagado: Number(p.totalPagado || 0), saldo: Math.max(0, Number(p.total || 0) - Number(p.totalPagado || 0)), pagado: p.pagado, metodos: [...new Set((p.pagos || []).map(x => x.metodo))].join(", "), pagos: safe(p.pagos), detalle: safe(p.items) }));
-  addTable(workbook, "Pedidos", [{header:"Fecha",key:"fecha",width:22},{header:"Mesa",key:"mesa"},{header:"Estado",key:"estado"},{header:"Registrado por",key:"creadoPor"},{header:"Total",key:"total"},{header:"Cobrado",key:"totalPagado"},{header:"Saldo",key:"saldo"},{header:"Pagado",key:"pagado"},{header:"Métodos",key:"metodos"},{header:"Detalle de pagos",key:"pagos",width:45},{header:"Productos y notas",key:"detalle",width:60}], orderRows, [5,6,7]);
-  addTable(workbook, "Gastos", [{header:"Fecha",key:"fecha"},{header:"Tipo",key:"tipo"},{header:"Categoría",key:"categoria"},{header:"Descripción",key:"descripcion",width:42},{header:"Monto",key:"monto"},{header:"Método",key:"metodoPago"},{header:"Proveedor",key:"proveedor"},{header:"Registrado por",key:"registradoPor"},{header:"Cuenta",key:"cuentaId"}], gastos.map(g=>({ ...g, fecha:dateValue(g.fecha) })), [5]);
-  addTable(workbook, "PagosPersonal", [{header:"Fecha",key:"fecha"},{header:"Trabajador",key:"trabajador"},{header:"Monto",key:"monto"},{header:"Método",key:"metodoPago"},{header:"Nota",key:"nota",width:35},{header:"Registrado por",key:"registradoPor"},{header:"Autorizado por",key:"autorizadoPor"},{header:"Asistencia",key:"asistencia"}], pagos.map(p=>({ ...p, fecha:dateValue(p.fecha) })), [3]);
-  addTable(workbook, "InventarioMov", [{header:"Fecha",key:"fecha"},{header:"Producto",key:"nombreProducto"},{header:"Cambio",key:"cambio"},{header:"Saldo",key:"saldo"},{header:"Tipo",key:"tipo"},{header:"Motivo",key:"motivo",width:38},{header:"Usuario",key:"usuario"}], movimientos.map(m=>({ ...m, fecha:dateValue(m.fecha) })));
-  addTable(workbook, "Asistencias", [{header:"Fecha",key:"fecha"},{header:"Trabajador",key:"trabajador"},{header:"Estado",key:"estado"},{header:"Entrada",key:"entrada"},{header:"Salida",key:"salida"},{header:"Min. tardanza",key:"minutosTardanza"},{header:"Pago diario",key:"pagoDiario"},{header:"Observaciones",key:"observaciones",width:38},{header:"Registrado por",key:"registradoPor"}], asistencias.map(a=>({ ...a, entrada:dateValue(a.entrada), salida:dateValue(a.salida) })), [7]);
-  addTable(workbook, "Caja", [{header:"Fecha",key:"fecha"},{header:"Fecha operativa",key:"fechaOperativa"},{header:"Ventas",key:"totalVentas"},{header:"Cantidad pedidos",key:"cantidadPedidos"},{header:"Cerrado por",key:"cerradoPor"}], caja.map(c=>({ ...c, fecha:dateValue(c.fecha) })), [3]);
-  addTable(workbook, "Notificaciones", [{header:"Fecha",key:"fecha"},{header:"Usuario",key:"usuario"},{header:"Rol",key:"rol"},{header:"Mensaje",key:"mensaje",width:65},{header:"Leído",key:"leido"}], notificaciones.map(n=>({ ...n, fecha:dateValue(n.fecha) })));
-  addTable(workbook, "Documentos", [{header:"Fecha",key:"fecha"},{header:"Clase",key:"clase"},{header:"Tipo",key:"tipo"},{header:"Concepto",key:"concepto",width:38},{header:"Monto",key:"monto"},{header:"Proveedor",key:"proveedor"},{header:"Categoría",key:"categoria"},{header:"Método",key:"metodoPago"},{header:"Serie",key:"serie"},{header:"Número",key:"numero"},{header:"RUC",key:"ruc"},{header:"Observaciones",key:"observaciones",width:40},{header:"Origen",key:"origen"},{header:"Registrado por",key:"registradoPor"},{header:"Archivo",key:"archivo"}], documentos.map(d=>({ ...d, fecha:dateValue(d.fecha), archivo:d.archivo ? `${d.archivo.nombre} (${d.archivo.tamano} bytes)` : "" })), [5]);
-  addTable(workbook, "CuentasServicio", [{header:"Nombre",key:"nombre"},{header:"Categoría",key:"categoria"},{header:"Monto estimado",key:"montoEstimado"},{header:"Periodicidad",key:"periodicidad"},{header:"Día vencimiento",key:"diaVencimiento"},{header:"Proveedor",key:"proveedor"},{header:"Activa",key:"activa"},{header:"Fecha último pago",key:"fechaUltimoPago"},{header:"Monto último pago",key:"montoUltimoPago"},{header:"Observaciones",key:"observaciones",width:40}], cuentas.map(c=>({ ...c, fechaUltimoPago:dateValue(c.ultimoPago), montoUltimoPago:c.ultimoPagoMonto ?? "" })), [3,9]);
-  addTable(workbook, "InventarioActual", [{header:"Nombre",key:"nombre"},{header:"Tipo",key:"tipo"},{header:"Categoría",key:"categoria"},{header:"Precio",key:"precio"},{header:"Costo",key:"costo"},{header:"Stock",key:"stock"},{header:"Stock mínimo",key:"stockMinimo"},{header:"Unidad",key:"unidad"},{header:"Activo",key:"activo"},{header:"Receta",key:"receta",width:40}], productos.map(p=>({ ...p, receta:safe(p.receta) })), [4,5]);
-  addTable(workbook, "Categorias", [{header:"Nombre",key:"nombre"},{header:"Descripción",key:"descripcion",width:45},{header:"Activa",key:"activo"}], categorias);
-  const attachmentRows = [];
-  for (const item of adjuntos) {
-    const encoded = item.datos.toString("base64");
-    for (let offset = 0, part = 1; offset < encoded.length; offset += 30000, part++) attachmentRows.push({ documentoId:item.documentoId, nombre:item.nombre, mime:item.mime, tamano:item.tamano, parte:part, contenido:encoded.slice(offset, offset + 30000) });
-  }
-  addTable(workbook, "AdjuntosBase64", [{header:"ID documento",key:"documentoId",width:28},{header:"Nombre archivo",key:"nombre",width:32},{header:"Tipo MIME",key:"mime",width:58},{header:"Tamaño bytes",key:"tamano"},{header:"Parte",key:"parte"},{header:"Base64 (unir por ID y parte)",key:"contenido",width:55}], attachmentRows);
-  const objects = [pedidos,gastos,pagos,movimientos,asistencias,caja,notificaciones,documentos,cuentas,productos,categorias];
-  const collectionNames = ["Pedidos", "Gastos", "Pagos personal", "Movimientos inventario", "Asistencias", "Cierres de caja", "Notificaciones", "Documentos financieros", "Cuentas de servicio", "Productos e insumos", "Categorías"];
-  const index = workbook.addWorksheet("Alcance"); index.addRow(["Colección", "Registros incluidos"]); collectionNames.forEach((name, i)=>index.addRow([name,objects[i].length])); index.addRow(["Archivos adjuntos", adjuntos.length]); index.addRow(["Bloques Base64", attachmentRows.length]);
-  index.getRow(1).font = { bold:true,color:{argb:"FFFFFFFF"} }; index.getRow(1).fill = { type:"pattern",pattern:"solid",fgColor:{argb:"FF123F47"} }; index.columns = [{width:32},{width:20}];
   return workbook.xlsx.writeBuffer();
 }
 
-module.exports = { buildReinicioWorkbook, safe };
+module.exports = { buildReinicioWorkbook, safe: text };
